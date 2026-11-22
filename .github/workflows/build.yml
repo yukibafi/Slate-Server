@@ -1,0 +1,108 @@
+name: Build apps
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths-ignore: ["**.md"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15,       name: mac-apple-silicon, target: aarch64-apple-darwin }
+          - { os: macos-15-intel,       name: mac-intel,         target: x86_64-apple-darwin }
+          - { os: windows-latest, name: windows,           target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ matrix.target }}" }
+      - name: Build app (window)
+        working-directory: gui
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Build engine (carries the app inside, so one update file updates both)
+        shell: bash
+        run: |
+          EXT=""; [ "${{ runner.os }}" = "Windows" ] && EXT=".exe"
+          export CREATE_PANEL_GUI_BLOB="${{ github.workspace }}/gui/target/${{ matrix.target }}/release/create-panel-app$EXT"
+          cargo build --release --target ${{ matrix.target }}
+      - name: Update file (for Settings > Update from a file)
+        shell: bash
+        run: |
+          EXT=""; [ "${{ runner.os }}" = "Windows" ] && EXT=".exe"
+          VER=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          mkdir -p upd && cp "target/${{ matrix.target }}/release/create-panel$EXT" "upd/create-panel-update-v$VER-${{ matrix.name }}$EXT"
+          cp "gui/target/${{ matrix.target }}/release/create-panel-app$EXT" "upd/create-panel-app-v$VER-${{ matrix.name }}$EXT"
+      - name: Package (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          APP="Create Panel.app"
+          mkdir -p "dist/$APP/Contents/MacOS"
+          cp target/${{ matrix.target }}/release/create-panel "dist/$APP/Contents/MacOS/create-panel"
+          cp gui/target/${{ matrix.target }}/release/create-panel-app "dist/$APP/Contents/MacOS/Create Panel"
+          mkdir -p "dist/$APP/Contents/Resources" && cp gui/assets/icon.icns "dist/$APP/Contents/Resources/icon.icns"
+          cat > "dist/$APP/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleName</key><string>Create Panel</string>
+            <key>CFBundleExecutable</key><string>Create Panel</string>
+            <key>CFBundleIdentifier</key><string>com.createpanel.app</string>
+            <key>CFBundleIconFile</key><string>icon</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>0.1.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict></plist>
+          PLIST
+          VER=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          sed -i '' "s|<string>0.1.0</string>|<string>$VER</string><key>CFBundleVersion</key><string>$VER</string>|" "dist/$APP/Contents/Info.plist"
+          chmod +x "dist/$APP/Contents/MacOS/"*
+          # unsigned build: ad-hoc sign so macOS lets you right-click > Open it
+          codesign --force --deep --sign - "dist/$APP" || true
+          cd dist && ditto -c -k --keepParent "$APP" ../Create-Panel-${{ matrix.name }}.zip && cd ..
+          mkdir -p dmgroot && cp -R "dist/$APP" dmgroot/ && ln -s /Applications dmgroot/Applications
+          hdiutil create -volname "Create Panel" -srcfolder dmgroot -ov -format UDZO "Create-Panel-${{ matrix.name }}.dmg"
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/CreatePanel | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/create-panel.exe dist/CreatePanel/
+          Copy-Item gui/target/${{ matrix.target }}/release/create-panel-app.exe dist/CreatePanel/
+          Copy-Item gui/assets/icon.ico dist/CreatePanel/
+          Compress-Archive -Path dist/CreatePanel/* -DestinationPath Create-Panel-${{ matrix.name }}.zip
+      - name: Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          $ver = ((Select-String -Path Cargo.toml -Pattern '^version' | Select-Object -First 1).Line -split '"')[1]
+          & $iscc "/DAppVersion=$ver" "/DBinDir=..\target\${{ matrix.target }}\release" "/DGuiBinDir=..\gui\target\${{ matrix.target }}\release" installer\create-panel.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Create-Panel-${{ matrix.name }}
+          path: |
+            Create-Panel-${{ matrix.name }}.zip
+            Create-Panel-${{ matrix.name }}.dmg
+            dist/Create-Panel-Setup.exe
+            upd/*
+          if-no-files-found: ignore
+  release:
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - name: Publish the release (the app's "Update now" button reads this)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          [ -n "$(find out -type f)" ] || { echo "Nothing was built."; exit 1; }
+          VER=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          gh release delete "v$VER" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "v$VER" $(find out -type f) --title "Create Panel $VER" --notes "Open the app and press Update now." --target "$GITHUB_SHA" --latest
