@@ -1,0 +1,22 @@
+[package]
+name = "create-panel"
+version = "0.2.10"
+edition = "2021"
+description = "Create Server Panel, Rust port (phase 1: server panel core)"
+
+# Phase 1 uses only the standard library so it builds with no downloads.
+# Later phases add axum/tokio (HTTP), serde_json and, for the desktop window, slint.
+[lib]
+name = "create_panel"
+path = "src/lib.rs"
+
+[[bin]]
+name = "create-panel"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true

@@ -1,0 +1,66 @@
+HOW UPDATES WORK IN YOUR SERVER HUB
+===================================
+
+There are three different kinds of updates. They are separate on purpose.
+
+1. MOD UPDATES (Tools tab > Mod updates)
+----------------------------------------
+The panel looks up every mod in your mods folder on Modrinth (and CurseForge if
+you connected a key) and compares versions for your Minecraft version and loader.
+
+When it looks ("Look for updates"):
+  - All the time ......... every 30 minutes in the background
+  - Each server start .... every time the server starts
+  - First start of day ... the first start each day, from the time you pick
+  - At a set time ........ once a day at the time you pick
+  - Only when I press .... never on its own; use "Check now"
+
+What happens when updates are found:
+  - Nothing is changed by itself unless "Install them for me" is ON.
+  - With it OFF: you see "N updates waiting" and install them yourself
+    (Mods tab > Installed, or the "Install now" button in Tools).
+  - With it ON: the panel installs them for you, safely (see below).
+
+SAFE RESTART + INSTALL (what "Install them for me" and "Install now" do)
+  If the server is OFF   -> the updates are installed straight away.
+  If the server is ON    -> in this order:
+     1. If players are online, it says: "restarting in 60 seconds",
+        then "10 seconds". If nobody is on, it skips the wait.
+     2. It saves the world (save-all flush).
+     3. It stops the server the normal way (waits up to 2 minutes, then
+        force-stops only if it is stuck).
+     4. It downloads and swaps the mod files. Each download is checked
+        against the site's hash. Old files go to the "mods-trash" folder,
+        so you can always put one back.
+     5. It starts the server again. (If the server was off, it stays off.)
+  If an install fails, the server still starts again with whatever mods it
+  has, and the result shows under "Mod updates" ("Installed 3 updates, 1 skipped").
+  Mods that can only be downloaded by hand (no direct link) are never touched.
+
+  Tip: keep Backups ON. After an update, test the server. Players may need the
+  new mod versions too, so download the modpack again afterwards.
+
+  "Lock updates" (Overview > Options) blocks all of this, including the install.
+
+2. SERVER SOFTWARE UPDATES (NeoForge etc.)
+------------------------------------------
+Done from the Overview/NeoForge update option. This takes a backup first and is
+never automatic. It is also blocked by "Lock updates".
+
+3. PANEL UPDATES (the hub itself)
+---------------------------------
+Hub > Settings > Update panel. You pick the new Create-Server-Panel file; the
+panel checks it is valid, keeps your old copy, and restarts itself. Your servers,
+worlds and settings are not touched. The version shows in the Settings tab.
+
+SCHEDULED TASKS (Tools tab > Scheduled tasks)
+---------------------------------------------
+Type what you want in plain words and press "Make tasks", then "Save changes":
+   start at 6am and stop at 11pm every day
+   restart at 4:30am on weekdays
+   back up every 6 hours
+   start at 8am on sat and sun, stop at midnight
+It understands am/pm and 24-hour times, noon/midnight, "every day", weekday
+names, "weekdays", "weekends", and "every N minutes/hours". Check the preview
+under the box, then press Save changes (nothing runs until you save).
+The panel has to be running (it normally runs in the background on the Mac).

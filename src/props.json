@@ -1,0 +1,332 @@
+[
+{
+"name": "Basics",
+"fields": [
+{
+"key": "motd",
+"type": "text",
+"label": "Server name (MOTD)",
+"default": "A Minecraft Server",
+"help": "The line shown under your server in the multiplayer list."
+},
+{
+"key": "max-players",
+"type": "int",
+"label": "Max players",
+"default": "20",
+"help": "",
+"min": 1,
+"max": 1000
+},
+{
+"key": "gamemode",
+"type": "select",
+"label": "Default game mode",
+"default": "survival",
+"help": "",
+"options": [
+"survival",
+"creative",
+"adventure",
+"spectator"
+]
+},
+{
+"key": "difficulty",
+"type": "select",
+"label": "Difficulty",
+"default": "easy",
+"help": "",
+"options": [
+"peaceful",
+"easy",
+"normal",
+"hard"
+]
+},
+{
+"key": "hardcore",
+"type": "bool",
+"label": "Hardcore",
+"default": "false",
+"help": "Players are banned when they die."
+},
+{
+"key": "pvp",
+"type": "bool",
+"label": "Player vs player",
+"default": "true",
+"help": "Players can hurt each other."
+},
+{
+"key": "white-list",
+"type": "bool",
+"label": "Whitelist",
+"default": "false",
+"help": "Only players on the whitelist can join."
+},
+{
+"key": "enforce-whitelist",
+"type": "bool",
+"label": "Kick non-whitelisted players",
+"default": "false",
+"help": "When the whitelist changes, kick anyone no longer on it."
+},
+{
+"key": "online-mode",
+"type": "bool",
+"label": "Check accounts with Mojang",
+"default": "true",
+"help": "Leave this ON. Turning it off lets anyone join with any name."
+}
+]
+},
+{
+"name": "World",
+"fields": [
+{
+"key": "level-name",
+"type": "text",
+"label": "World folder name",
+"default": "world",
+"help": "Changing this makes a brand new world (the old one stays in its folder)."
+},
+{
+"key": "level-seed",
+"type": "text",
+"label": "World seed",
+"default": "",
+"help": "Only used when a new world is created."
+},
+{
+"key": "level-type",
+"type": "select",
+"label": "World type",
+"default": "minecraft:normal",
+"help": "Only used when a new world is created.",
+"options": [
+"minecraft:normal",
+"minecraft:flat",
+"minecraft:large_biomes",
+"minecraft:amplified",
+"minecraft:single_biome_surface"
+]
+},
+{
+"key": "generate-structures",
+"type": "bool",
+"label": "Generate structures",
+"default": "true",
+"help": "Villages, temples, etc. in new chunks."
+},
+{
+"key": "allow-nether",
+"type": "bool",
+"label": "Allow the Nether",
+"default": "true",
+"help": ""
+},
+{
+"key": "spawn-protection",
+"type": "int",
+"label": "Spawn protection radius",
+"default": "16",
+"help": "Blocks around spawn that only ops can edit. 0 turns it off.",
+"min": 0,
+"max": 1000
+},
+{
+"key": "max-world-size",
+"type": "int",
+"label": "Max world size (radius)",
+"default": "29999984",
+"help": "",
+"min": 1,
+"max": 29999984
+},
+{
+"key": "spawn-monsters",
+"type": "bool",
+"label": "Spawn monsters",
+"default": "true",
+"help": ""
+},
+{
+"key": "spawn-animals",
+"type": "bool",
+"label": "Spawn animals",
+"default": "true",
+"help": ""
+},
+{
+"key": "spawn-npcs",
+"type": "bool",
+"label": "Spawn villagers",
+"default": "true",
+"help": ""
+},
+{
+"key": "allow-flight",
+"type": "bool",
+"label": "Allow flying",
+"default": "false",
+"help": "Turn ON for modded servers, otherwise players get kicked for 'flying' with jetpacks, elytra tricks, etc."
+},
+{
+"key": "force-gamemode",
+"type": "bool",
+"label": "Force default game mode on join",
+"default": "false",
+"help": ""
+},
+{
+"key": "enable-command-block",
+"type": "bool",
+"label": "Command blocks",
+"default": "false",
+"help": ""
+}
+]
+},
+{
+"name": "Performance",
+"fields": [
+{
+"key": "view-distance",
+"type": "int",
+"label": "View distance (chunks)",
+"default": "10",
+"help": "Lower this first if the server lags with several players.",
+"min": 2,
+"max": 32
+},
+{
+"key": "simulation-distance",
+"type": "int",
+"label": "Simulation distance (chunks)",
+"default": "10",
+"help": "How far from players mobs and machines actually run.",
+"min": 3,
+"max": 32
+},
+{
+"key": "max-tick-time",
+"type": "int",
+"label": "Watchdog timeout (ms)",
+"default": "60000",
+"help": "Set to -1 to stop 'server stopped responding' crashes while a big modpack is busy.",
+"min": -1,
+"max": 2147483647
+},
+{
+"key": "network-compression-threshold",
+"type": "int",
+"label": "Network compression threshold",
+"default": "256",
+"help": "-1 turns compression off (fine on a home network).",
+"min": -1,
+"max": 65535
+},
+{
+"key": "entity-broadcast-range-percentage",
+"type": "int",
+"label": "Entity render range (%)",
+"default": "100",
+"help": "",
+"min": 10,
+"max": 1000
+},
+{
+"key": "sync-chunk-writes",
+"type": "bool",
+"label": "Sync chunk writes",
+"default": "true",
+"help": "Safer against corruption, a little slower."
+},
+{
+"key": "player-idle-timeout",
+"type": "int",
+"label": "Kick idle players after (minutes)",
+"default": "0",
+"help": "0 = never.",
+"min": 0,
+"max": 100000
+},
+{
+"key": "use-native-transport",
+"type": "bool",
+"label": "Native networking",
+"default": "true",
+"help": ""
+}
+]
+},
+{
+"name": "Network & access",
+"fields": [
+{
+"key": "server-port",
+"type": "int",
+"label": "Server port",
+"default": "25565",
+"help": "Friends use this in the address. If you change it, update any port forward.",
+"min": 1,
+"max": 65535
+},
+{
+"key": "server-ip",
+"type": "text",
+"label": "Bind to IP",
+"default": "",
+"help": "Leave empty unless you know you need it."
+},
+{
+"key": "enable-status",
+"type": "bool",
+"label": "Show in server list",
+"default": "true",
+"help": ""
+},
+{
+"key": "hide-online-players",
+"type": "bool",
+"label": "Hide player list in server list",
+"default": "false",
+"help": ""
+},
+{
+"key": "op-permission-level",
+"type": "select",
+"label": "Op permission level",
+"default": "4",
+"help": "4 = full control.",
+"options": [
+"1",
+"2",
+"3",
+"4"
+]
+},
+{
+"key": "function-permission-level",
+"type": "select",
+"label": "Function permission level",
+"default": "2",
+"help": "",
+"options": [
+"1",
+"2",
+"3",
+"4"
+]
+},
+{
+"key": "log-ips",
+"type": "bool",
+"label": "Log player IPs",
+"default": "true",
+"help": ""
+}
+]
+}
+]
