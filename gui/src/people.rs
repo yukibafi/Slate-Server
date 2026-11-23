@@ -72,10 +72,10 @@ pub fn load_stats(ui: &Weak<App>, st: &Shared) {
     let total = rows.len();
     let lists = c.get(&sc(&c, &id, "/api/lists")).ok();
     let has = |k: &str, n: &str| lists.as_ref().map(|j| arr(j, k).iter().any(|x| x.as_str().map(|t| t.eq_ignore_ascii_case(n)).unwrap_or(false))).unwrap_or(false);
-    let tags: Vec<String> = names.iter().map(|n| { let mut v: Vec<&str> = vec![]; if has("ops", n) { v.push("Op"); } if has("whitelist", n) { v.push("Whitelisted"); } if has("banned", n) { v.push("Banned"); } v.join("  ·  ") }).collect();
+    let tags: Vec<(String, bool, bool, bool)> = names.iter().map(|n| { let (o, w, b) = (has("ops", n), has("whitelist", n), has("banned", n)); let mut v: Vec<&str> = vec![]; if o { v.push("Operator"); } if w { v.push("Whitelisted"); } if b { v.push("Banned"); } (v.join("  ·  "), w, o, b) }).collect();
     let online_n = rows.iter().filter(|r| r.5).count();
     with_ui(ui, move |a| {
-        let v: Vec<PStat> = rows.into_iter().zip(tags.into_iter()).map(|((n, pt, jn, last, first, on), tg)| { let img = load(&n); PStat { has_head: img.is_some(), head: img.unwrap_or_default(), name: n.into(), playtime: pt.into(), joins: jn.into(), last: last.into(), first: first.into(), online: on, tags: tg.into() } }).collect();
+        let v: Vec<PStat> = rows.into_iter().zip(tags.into_iter()).map(|((n, pt, jn, last, first, on), tg)| { let img = load(&n); PStat { has_head: img.is_some(), head: img.unwrap_or_default(), name: n.into(), playtime: pt.into(), joins: jn.into(), last: last.into(), first: first.into(), online: on, tags: tg.0.into(), wl: tg.1, op: tg.2, banned: tg.3 } }).collect();
         let _ = online_n;
         a.set_pstats_note(SharedString::from(format!("{total} player{} seen", if total == 1 { "" } else { "s" })));
         a.set_pstats(ModelRc::new(VecModel::from(v)));

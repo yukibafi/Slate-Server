@@ -92,6 +92,20 @@ pub fn kind_of(l: &str) -> i32 {
     else if l.contains("]: <") { 1 }
     else { 0 }
 }
+/// Splits a raw server log line into (time, level, message) for the column view.
+pub fn parse_line(l: &str, kind: i32) -> (String, String, String) {
+    if let Some(r) = l.strip_prefix("> ") { return (String::new(), "CMD".into(), r.to_string()); }
+    if let Some(r) = l.strip_prefix("[panel]") { return (String::new(), "PANEL".into(), r.trim().to_string()); }
+    let mut rest = l; let mut groups: Vec<String> = vec![];
+    while rest.starts_with('[') && groups.len() < 3 { match rest.find(']') { Some(i) => { groups.push(rest[1..i].to_string()); rest = rest[i + 1..].trim_start(); } None => break } }
+    if groups.is_empty() { return (String::new(), if kind == 3 { "ERROR".into() } else if kind == 2 { "WARN".into() } else { String::new() }, l.to_string()); }
+    let time = groups[0].rsplit(' ').next().unwrap_or("").split('.').next().unwrap_or("").to_string();
+    let time = if time.contains(':') { time } else { String::new() };
+    let lvl_raw = groups.iter().skip(1).find_map(|g| g.rsplit('/').next().filter(|x| matches!(*x, "INFO" | "WARN" | "ERROR" | "FATAL" | "DEBUG" | "TRACE"))).unwrap_or("");
+    let msg = rest.trim_start_matches(':').trim().to_string();
+    let level = match (lvl_raw, kind) { ("FATAL", _) | ("ERROR", _) | (_, 3) => "ERROR", ("WARN", _) | (_, 2) => "WARN", (_, 1) => "CHAT", ("DEBUG", _) | ("TRACE", _) => "DEBUG", _ => "INFO" };
+    (time, level.into(), msg)
+}
 /// Lines that pass the current console filter and search.
 fn shown(a: &App, lines: &[String]) -> Vec<(String, i32)> {
     let f = a.get_con_filter().to_string(); let q = a.get_con_search().to_string().to_lowercase();
@@ -114,7 +128,7 @@ pub fn fp_fetch(ui: &Weak<App>, st: &Shared) -> String {
 }
 
 pub fn set_console(a: &App, lines: &[String]) {
-    let out: Vec<ConLine> = shown(a, lines).into_iter().map(|(t, k)| ConLine { text: t.as_str().into(), kind: k }).collect();
+    let out: Vec<ConLine> = shown(a, lines).into_iter().map(|(t, k)| { let (tm, lv, ms) = parse_line(&t, k); ConLine { text: t.as_str().into(), kind: k, time: tm.into(), level: lv.into(), msg: ms.into() } }).collect();
     a.set_con_count(SharedString::from(format!("{} lines", out.len())));
     a.set_con(ModelRc::new(VecModel::from(out)));
 }
@@ -165,7 +179,8 @@ pub fn load_history(ui: &Weak<App>, st: &Shared) {
         let mut first = true;
         for p in &pts { ply.push_str(&format!("{} {:.1} {:.1} ", if first { "M" } else { "L" }, (p.0 - t0) / span * 1000.0, 100.0 - p.2 / maxp * 100.0)); first = false; }
     } else { note = "Collecting data... (a point every 30 seconds, kept for 7 days)".into(); }
-    with_ui(ui, move |a| { a.set_g_mem(SharedString::from(mem)); a.set_g_ply(SharedString::from(ply)); a.set_g_note(SharedString::from(note)); });
+    let peak = { let now = pts.last().map(|p| p.0).unwrap_or(0.0); pts.iter().filter(|p| p.0 >= now - 86400.0).map(|p| p.2 as i32).max().unwrap_or(0) };
+    with_ui(ui, move |a| { a.set_g_mem(SharedString::from(mem)); a.set_g_ply(SharedString::from(ply)); a.set_g_note(SharedString::from(note)); a.set_ov_peak(peak); });
 }
 pub fn load_public_ip(ui: &Weak<App>, st: &Shared) {
     let (Some(c), id) = (client(st), sid(st)) else { return };
@@ -338,7 +353,7 @@ pub fn auto_rows(cfg: &J, mu: &J, open: &HashSet<String>) -> Vec<Field> {
 }
 pub fn render_auto(a: &App, st: &Shared) {
     let (cfg, mu, open) = { let g = st.lock().unwrap(); (g.x.auto.clone(), g.x.modupd.clone(), g.x.auto_open.clone()) };
-    if let (Some(c), Some(m)) = (cfg, mu) { a.set_afields(ModelRc::new(VecModel::from(auto_rows(&c, &m, &open)))); }
+    if let (Some(c), Some(m)) = (cfg, mu) { let rows = auto_rows(&c, &m, &open); a.set_afields_h(crate::rows_h(&rows)); a.set_afields(ModelRc::new(VecModel::from(rows))); }
 }
 pub fn load_auto(ui: &Weak<App>, st: &Shared) {
     let (Some(c), id) = (client(st), sid(st)) else { return };
@@ -539,12 +554,12 @@ pub fn wire(app: &App, ui: &Weak<App>, st: &Shared) {
                     let rows: Vec<BrowseRow> = arr(&j, "results").iter().map(|r| {
                         let nm = gs(r, "name");
                         let inst = r.get("installed").filter(|x| matches!(x, J::Obj(_))).map(|x| gs(x, "version")).unwrap_or_default();
-                        BrowseRow { id: gs(r, "id").into(), name: nm.as_str().into(), author: gs(r, "author").into(), summary: gs(r, "summary").into(), downloads: human(gn(r, "downloads")).into(), installed: inst.into(), compat: !matches!(r.get("compat"), Some(J::Bool(false))), manual: flag(r, "manual"), tint: tint_of(&nm), letter: letter_of(&nm).into() }
+                        BrowseRow { id: gs(r, "id").into(), name: nm.as_str().into(), author: gs(r, "author").into(), summary: gs(r, "summary").into(), downloads: human(gn(r, "downloads")).into(), installed: inst.into(), compat: !matches!(r.get("compat"), Some(J::Bool(false))), manual: flag(r, "manual"), tint: tint_of(&nm), letter: letter_of(&nm).into(), sel: false, file: r.get("installed").filter(|x| matches!(x, J::Obj(_))).map(|x| gs(x, "file")).unwrap_or_default().into(), cats: arr(r, "categories").iter().chain(arr(r, "loaders").iter()).filter_map(|x| x.as_str().map(|t| t.to_string())).take(4).collect::<Vec<_>>().join("  ·  ").into() }
                     }).collect();
                     let env = j.get("env").map(|e| gs(e, "label")).unwrap_or_default();
                     let note = if rows.is_empty() { "Nothing found.".to_string() } else if env.is_empty() { String::new() } else { format!("Showing mods that work with {env}.") };
-                    let s3 = s_.clone();
-                    with_ui(&u, move |a| { a.set_br(ModelRc::new(VecModel::from(rows))); a.set_br_note(SharedString::from(note)); a.set_br_need_key(false); crate::icons::apply(a, &s3); });
+                    let s3 = s_.clone(); let q2 = q.clone();
+                    with_ui(&u, move |a| { if a.get_br_q().as_str() != q2 { return; } a.set_br(ModelRc::new(VecModel::from(rows))); a.set_br_note(SharedString::from(note)); a.set_br_need_key(false); a.set_br_sel_n(0); a.set_br_sel_inst(0); a.set_br_sel_new(0); if a.get_br_detail_open() { let did = a.get_br_d_id(); let m = a.get_br(); for i in 0..m.row_count() { if let Some(r) = m.row_data(i) { if r.id == did { a.set_br_d_index(i as i32); a.set_br_d_installed(r.file.clone()); a.set_br_d_ver(r.installed.clone()); } } } } crate::icons::apply(a, &s3); });
                     { s_.lock().unwrap().x.br_icons = icons.iter().cloned().collect(); }
                     crate::icons::fetch(&u, &s_, icons.into_iter().map(|x| x.1).collect());
                 }
@@ -574,6 +589,86 @@ pub fn wire(app: &App, ui: &Weak<App>, st: &Shared) {
             done(&u, if last.is_empty() { "Installed.".into() } else { last });
             load_mods(&u, &s_);
             with_ui(&u, |a| a.invoke_br_search());
+        });
+    }); }
+    // ---- browse: selection, bulk install / uninstall, details
+    fn br_counts(a: &App) {
+        let m = a.get_br(); let (mut n, mut inst, mut new_) = (0, 0, 0);
+        for i in 0..m.row_count() { if let Some(r) = m.row_data(i) { if r.sel { n += 1; if r.installed.as_str() != "" { inst += 1; } else if !r.manual { new_ += 1; } } } }
+        a.set_br_sel_n(n); a.set_br_sel_inst(inst); a.set_br_sel_new(new_);
+    }
+    { let u = ui.clone(); app.on_br_sel(move |i, on| { if let Some(a) = u.upgrade() { let m = a.get_br(); if let Some(mut r) = m.row_data(i as usize) { r.sel = on; m.set_row_data(i as usize, r); } br_counts(&a); } }); }
+    { let u = ui.clone(); app.on_br_sel_all(move |on| { if let Some(a) = u.upgrade() { let m = a.get_br(); for i in 0..m.row_count() { if let Some(mut r) = m.row_data(i) { r.sel = on && !r.manual; m.set_row_data(i, r); } } br_counts(&a); } }); }
+    { let (u, s_) = (ui.clone(), st.clone()); app.on_br_uninstall(move |files| {
+        let files: Vec<String> = files.split('\n').filter(|x| !x.is_empty()).map(|x| x.to_string()).collect(); if files.is_empty() { return; }
+        let (u, s_) = (u.clone(), s_.clone());
+        with_ui(&u, |a| { a.set_br_busy(true); a.set_br_note(SharedString::from("Removing...")); });
+        bg(move || {
+            let (Some(c), id) = (client(&s_), sid(&s_)) else { return };
+            let r = c.post(&sc(&c, &id, "/api/mods/delete"), &obj(vec![("files", J::Arr(files.iter().map(|f| s(f)).collect()))]));
+            let m = msg_of(&r);
+            with_ui(&u, move |a| { a.set_br_busy(false); a.set_br_note(SharedString::from(m)); a.set_br_detail_open(false); });
+            load_mods(&u, &s_);
+            with_ui(&u, |a| a.invoke_br_search());
+        });
+    }); }
+    { let (u, s_) = (ui.clone(), st.clone()); app.on_br_bulk(move |what| {
+        let Some(a) = u.upgrade() else { return };
+        let src = a.get_br_source().to_string(); let m = a.get_br();
+        let rows: Vec<BrowseRow> = (0..m.row_count()).filter_map(|i| m.row_data(i)).filter(|r| r.sel).collect();
+        if what.as_str() == "uninstall" {
+            let files: Vec<String> = rows.iter().filter(|r| r.file.as_str() != "").map(|r| r.file.to_string()).collect();
+            if !files.is_empty() { a.invoke_br_uninstall(SharedString::from(files.join("\n"))); }
+            return;
+        }
+        let ids: Vec<String> = rows.iter().filter(|r| r.installed.as_str() == "" && !r.manual).map(|r| r.id.to_string()).collect();
+        if ids.is_empty() { return; }
+        a.set_br_busy(true); a.set_br_note(SharedString::from(format!("Installing {} mods...", ids.len())));
+        let (u, s_) = (u.clone(), s_.clone());
+        bg(move || {
+            let done = |u: &Weak<App>, m: String| with_ui(u, move |a| { a.set_br_busy(false); a.set_br_note(SharedString::from(m)); });
+            let (Some(c), id) = (client(&s_), sid(&s_)) else { return };
+            let items = J::Arr(ids.iter().map(|i| obj(vec![("source", s(&src)), ("id", s(i))])).collect());
+            let r = c.post(&sc(&c, &id, "/api/mods/multi-install"), &obj(vec![("items", items), ("with_deps", J::Bool(true))]));
+            if !ok_of(&r) { done(&u, msg_of(&r)); return; }
+            let mut last = String::new();
+            for _ in 0..1800 {
+                thread::sleep(Duration::from_secs(1));
+                let Ok(j) = c.get(&sc(&c, &id, "/api/browse/install/status")) else { continue };
+                last = gs(&j, "msg");
+                let msg = format!("{} ({}/{})", last, gn(&j, "done"), gn(&j, "total")); with_ui(&u, move |a| a.set_br_note(SharedString::from(msg)));
+                if gs(&j, "phase") != "running" { break; }
+            }
+            done(&u, if last.is_empty() { "Installed.".into() } else { last });
+            load_mods(&u, &s_);
+            with_ui(&u, |a| a.invoke_br_search());
+        });
+    }); }
+    { let (u, s_) = (ui.clone(), st.clone()); app.on_br_detail(move |i| {
+        let Some(a) = u.upgrade() else { return };
+        let Some(r) = a.get_br().row_data(i as usize) else { return };
+        let src = a.get_br_source().to_string();
+        a.set_br_d_index(i); a.set_br_d_id(r.id.clone()); a.set_br_d_name(r.name.clone()); a.set_br_d_author(r.author.clone()); a.set_br_d_installed(r.file.clone()); a.set_br_d_ver(r.installed.clone());
+        a.set_br_d_body(SharedString::from(r.summary.to_string())); a.set_br_d_meta(SharedString::new()); a.set_br_d_url(SharedString::new()); a.set_br_d_loading(true); a.set_br_detail_open(true);
+        let (u, s_, id_) = (u.clone(), s_.clone(), r.id.to_string());
+        bg(move || {
+            let (Some(c), id) = (client(&s_), sid(&s_)) else { return };
+            match c.get(&sc(&c, &id, &format!("/api/browse/detail?source={}&id={}", enc(&src), enc(&id_)))) {
+                Ok(j) => {
+                    let list = |k: &str, n: usize| arr(&j, k).iter().filter_map(|x| x.as_str().map(|t| t.to_string())).take(n).collect::<Vec<_>>().join(", ");
+                    let side = |k: &str| match gs(&j, k).as_str() { "required" => "required", "optional" => "optional", "unsupported" => "not used", _ => "" };
+                    let mut meta = vec![];
+                    let (lo, ca, mc) = (list("loaders", 6), list("categories", 6), list("mc", 8));
+                    if !lo.is_empty() { meta.push(format!("Works with: {lo}")); }
+                    if !mc.is_empty() { meta.push(format!("Minecraft: {mc}")); }
+                    if !ca.is_empty() { meta.push(format!("Topics: {ca}")); }
+                    let (sv_, cl) = (side("server"), side("client")); if !sv_.is_empty() || !cl.is_empty() { meta.push(format!("On the server: {}   ·   On players' PCs: {}", if sv_.is_empty() { "?" } else { sv_ }, if cl.is_empty() { "?" } else { cl })); }
+                    let body = { let b = gs(&j, "body"); let sm = gs(&j, "summary"); if b.trim().is_empty() { sm } else if sm.is_empty() { b } else { format!("{sm}\n\n{b}") } };
+                    let url = gs(&j, "url");
+                    with_ui(&u, move |a| { if a.get_br_d_id().as_str() == id_ { a.set_br_d_body(SharedString::from(body)); a.set_br_d_meta(SharedString::from(meta.join("\n"))); a.set_br_d_url(SharedString::from(url)); a.set_br_d_loading(false); } });
+                }
+                Err(e) => { let m = e.to_string(); with_ui(&u, move |a| { a.set_br_d_meta(SharedString::from(m)); a.set_br_d_loading(false); }); }
+            }
         });
     }); }
     { let (u, s_) = (ui.clone(), st.clone()); app.on_cf_save_key(move |k| {
@@ -748,4 +843,20 @@ pub fn pick_folder() -> Option<String> {
     #[cfg(all(unix, not(target_os = "macos")))]
     let out = std::process::Command::new("zenity").args(["--file-selection", "--directory"]).output();
     out.ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).filter(|s| !s.is_empty())
+}
+
+#[cfg(test)]
+mod parse_tests {
+    use super::parse_line;
+    #[test]
+    fn splits_log_lines() {
+        let (t, l, m) = parse_line("[12:41:07] [Server thread/INFO]: Alex joined the game", 0);
+        assert_eq!((t.as_str(), l.as_str(), m.as_str()), ("12:41:07", "INFO", "Alex joined the game"));
+        let (t, l, m) = parse_line("[22Nov2026 12:45:03.123] [Server thread/ERROR] [minecraft/X]: Couldn't parse", 3);
+        assert_eq!((t.as_str(), l.as_str(), m.as_str()), ("12:45:03", "ERROR", "Couldn't parse"));
+        let (_, l, m) = parse_line("[panel] Saved the game", 4);
+        assert_eq!((l.as_str(), m.as_str()), ("PANEL", "Saved the game"));
+        let (_, l, _) = parse_line("[12:00:00] [Server thread/INFO]: <Alex> hi", 1);
+        assert_eq!(l, "CHAT");
+    }
 }

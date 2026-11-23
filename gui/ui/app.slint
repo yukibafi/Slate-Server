@@ -38,16 +38,16 @@ export struct SrvCard { id: string, name: string, state: string, info: string, b
 export struct ModRow { file: string, name: string, version: string, enabled: bool, update: string, badge: string, letter: string, size: string, tint: color, sel: bool }
 export struct Field { key: string, label: string, help: string, kind: int, value: string, options: [string], count: int, open: bool }
 export struct PlayerRow { name: string, note: string, head: image, has-head: bool }
-export struct PStat { name: string, playtime: string, joins: string, last: string, first: string, online: bool, tags: string, head: image, has-head: bool }
+export struct PStat { name: string, playtime: string, joins: string, last: string, first: string, online: bool, tags: string, wl: bool, op: bool, banned: bool, head: image, has-head: bool }
 export struct PackRow { id: string, name: string, summary: string, author: string, downloads: string, mc: string }
 export struct BackupRow { name: string, size: string }
 export struct HBRow { rel: string, name: string, server: string, kind: string, size: string, ago: string }
 export struct BundleRow { path: string, name: string, size: string }
 export struct Pal { name: string, color: color }
-export struct ConLine { text: string, kind: int }
+export struct ConLine { text: string, kind: int, time: string, level: string, msg: string }
 export struct ActRow { text: string, kind: int, time: string }
 export struct DpRow { name: string, size: string, kind: string }
-export struct BrowseRow { id: string, name: string, author: string, summary: string, downloads: string, installed: string, compat: bool, manual: bool, tint: color, letter: string }
+export struct BrowseRow { id: string, name: string, author: string, summary: string, downloads: string, installed: string, compat: bool, manual: bool, tint: color, letter: string, sel: bool, file: string, cats: string }
 export struct FileRow { name: string, path: string, dir: bool, size: string, mtime: string }
 export struct Crumb { name: string, path: string }
 
@@ -344,9 +344,13 @@ component Stat inherits VerticalLayout {
 component MetricTile inherits Rectangle {
     in property <string> title;
     in property <string> value;
+    in property <string> suffix: "";
     in property <string> sub;
+    in property <color> sub-color: Theme.faint;
     in property <float> frac: -1;
-    height: 112px;
+    in property <string> spark: "";
+    in property <color> spark-color: Theme.accent;
+    height: 118px;
     background: Theme.panel;
     border-radius: 16px;
     border-width: 1px;
@@ -358,14 +362,30 @@ component MetricTile inherits Rectangle {
         padding-bottom: 12px;
         spacing: 3px;
         Text { text: root.title; color: Theme.mute; font-size: 13px; }
-        Text { text: root.value; color: Theme.text; font-size: 26px; font-weight: 700; overflow: elide; }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            Text { text: root.value; color: Theme.text; font-size: 28px; font-weight: 700; overflow: elide; }
+            if root.suffix != "": VerticalLayout { alignment: end; padding-bottom: 5px; Text { text: root.suffix; color: Theme.mute; font-size: 13px; } }
+        }
         if root.frac >= 0: Rectangle {
             height: 6px;
             border-radius: 3px;
             background: Theme.text.with-alpha(0.09);
             Rectangle { x: 0px; width: parent.width * min(root.frac, 1.0); height: 6px; border-radius: 3px; background: root.frac > 0.92 ? Theme.bad : (root.frac > 0.8 ? Theme.warn : Theme.accent); }
         }
-        Text { text: root.sub; color: Theme.faint; font-size: 12px; overflow: elide; }
+        Text { text: root.sub; color: root.sub-color; font-size: 12px; overflow: elide; }
+    }
+    if root.spark != "": Path {
+        x: parent.width - 116px;
+        y: 36px;
+        width: 98px;
+        height: 30px;
+        viewbox-width: 1000;
+        viewbox-height: 100;
+        commands: root.spark;
+        stroke: root.spark-color;
+        stroke-width: 2px;
     }
 }
 
@@ -426,7 +446,8 @@ component FieldList inherits Rectangle {
     callback edited(string, string);
     callback toggle(string);
     callback act(string, string);
-    ListView {
+    VerticalLayout {
+        alignment: start;
         for f in root.rows: Rectangle {
             height: f.kind == 9 ? 58px : (f.kind == 6 ? 58px : (f.kind == 10 ? 62px : 68px));
             if f.kind == 9: Rectangle {
@@ -577,7 +598,7 @@ component HubRail inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 spacing: 1px;
-                Text { text: "Create Panel"; color: Theme.text; font-size: 15px; font-weight: 700; }
+                Text { text: "Slate Server"; color: Theme.text; font-size: 15px; font-weight: 700; }
                 Text { text: root.ver-text; color: Theme.faint; font-size: 11px; overflow: elide; }
             }
         }
@@ -627,8 +648,126 @@ component HubRail inherits Rectangle {
     }
 }
 
+component SubNav inherits Rectangle {
+    in property <string> label;
+    in property <string> badge: "";
+    in property <bool> active: false;
+    callback clicked();
+    height: 38px;
+    border-radius: 10px;
+    background: root.active ? Theme.accent.with-alpha(0.16) : (ta.has-hover ? Theme.panel2 : transparent);
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
+        Text { text: root.label; color: root.active ? Theme.accent : Theme.text; font-weight: root.active ? 700 : 500; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+        if root.badge != "": Text { text: root.badge; color: Theme.faint; font-size: 11px; vertical-alignment: center; }
+    }
+    ta := TouchArea { clicked => { root.clicked(); } }
+}
+
+component LogRow inherits Rectangle {
+    in property <ConLine> line;
+    callback copy(string);
+    background: root.line.kind == 3 ? Theme.bad.with-alpha(0.12) : (root.line.kind == 2 ? Theme.warn.with-alpha(0.10) : (lta.has-hover ? Theme.text.with-alpha(0.05) : transparent));
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        spacing: 12px;
+        Text { text: root.line.time; color: Theme.faint; font-family: "Menlo"; font-size: 12px; width: 62px; vertical-alignment: top; }
+        Text {
+            text: root.line.level;
+            font-family: "Menlo";
+            font-size: 12px;
+            font-weight: 700;
+            width: 48px;
+            vertical-alignment: top;
+            color: root.line.level == "ERROR" ? Theme.bad : (root.line.level == "WARN" ? Theme.warn : (root.line.level == "CHAT" ? #8fd0ff : (root.line.level == "PANEL" ? Theme.accent : (root.line.level == "CMD" ? Theme.good : Theme.mute))));
+        }
+        Text {
+            text: root.line.msg;
+            font-family: "Menlo";
+            font-size: 12.5px;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
+            color: root.line.kind == 3 ? Theme.bad : (root.line.kind == 2 ? Theme.warn : (root.line.kind == 1 ? Theme.text : (root.line.kind == 5 ? Theme.good : (root.line.kind == 4 ? Theme.mute : Theme.text.with-alpha(0.86)))));
+        }
+    }
+    lta := TouchArea { mouse-cursor: pointer; clicked => { root.copy(root.line.text); } }
+}
+
+component WhoPanel inherits Rectangle {
+    in property <[PlayerRow]> online;
+    in property <string> state;
+    in-out property <string> say;
+    callback manage();
+    callback announce(string);
+    background: Theme.panel;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Theme.line;
+    VerticalLayout {
+        padding: 16px;
+        spacing: 8px;
+        HorizontalLayout {
+            VerticalLayout { alignment: center; Text { text: "Who's on"; color: Theme.text; font-size: 15px; font-weight: 700; } }
+            Rectangle { horizontal-stretch: 1; }
+            Btn { label: "Manage lists"; height: 28px; clicked => { root.manage(); } }
+        }
+        if root.online.length == 0: Text { text: root.state == "online" ? "Nobody is on right now." : "The server is offline."; color: Theme.mute; font-size: 13px; }
+        ListView {
+            vertical-stretch: 1;
+            for p in root.online: Rectangle {
+                height: 40px;
+                HorizontalLayout {
+                    spacing: 10px;
+                    VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 28px; } }
+                    Text { text: p.name; color: Theme.text; font-weight: 600; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: p.note; color: Theme.mute; font-size: 12px; vertical-alignment: center; }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            TextBox { placeholder: "Announce to everyone online"; text <=> root.say; horizontal-stretch: 1; accepted(t) => { root.announce(t); } }
+            Btn { label: "Announce"; primary: true; clicked => { root.announce(root.say); } }
+        }
+    }
+}
+
+component QuickPanel inherits Rectangle {
+    in property <bool> up;
+    callback quick(string);
+    callback restart();
+    height: 176px;
+    background: Theme.panel;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Theme.line;
+    VerticalLayout {
+        padding: 16px;
+        spacing: 8px;
+        Text { text: "QUICK ACTIONS"; color: Theme.mute; font-size: 11px; font-weight: 700; }
+        HorizontalLayout { spacing: 8px;
+            Btn { label: "Save world"; height: 32px; horizontal-stretch: 1; enabled: root.up; clicked => { root.quick("save"); } }
+            Btn { label: "Back up"; height: 32px; horizontal-stretch: 1; clicked => { root.quick("backup"); } }
+        }
+        HorizontalLayout { spacing: 8px;
+            Btn { label: "Set day"; height: 32px; horizontal-stretch: 1; enabled: root.up; clicked => { root.quick("day"); } }
+            Btn { label: "Set night"; height: 32px; horizontal-stretch: 1; enabled: root.up; clicked => { root.quick("night"); } }
+        }
+        HorizontalLayout { spacing: 8px;
+            Btn { label: "Clear weather"; height: 32px; horizontal-stretch: 1; enabled: root.up; clicked => { root.quick("clear"); } }
+            Btn { label: "Restart"; height: 32px; horizontal-stretch: 1; enabled: root.up; clicked => { root.restart(); } }
+        }
+    }
+}
+
 export component App inherits Window {
-    title: "Create Panel";
+    title: "Slate Server";
+    icon: @image-url("../assets/icon-1024.png");
     preferred-width: 1200px;
     preferred-height: 780px;
     min-width: 1000px;
@@ -845,6 +984,33 @@ export component App inherits Window {
     in-out property <[PlayerRow]> wl;
     in-out property <[PlayerRow]> ops;
     in-out property <[PlayerRow]> banned;
+    in-out property <int> br-sel-n: 0;
+    in-out property <int> br-sel-inst: 0;
+    in-out property <int> br-sel-new: 0;
+    in-out property <bool> br-detail-open: false;
+    in-out property <int> br-d-index: 0;
+    in-out property <string> br-d-id: "";
+    in-out property <string> br-d-name: "";
+    in-out property <string> br-d-author: "";
+    in-out property <string> br-d-installed: "";
+    in-out property <string> br-d-ver: "";
+    in-out property <string> br-d-body: "";
+    in-out property <string> br-d-meta: "";
+    in-out property <string> br-d-url: "";
+    in-out property <bool> br-d-loading: false;
+    callback br-sel(int, bool);
+    callback br-sel-all(bool);
+    callback br-bulk(string);
+    callback br-uninstall(string);
+    callback br-detail(int);
+    in-out property <string> players-view: "people";
+    in-out property <[Field]> groups;
+    in-out property <string> group-title: "";
+    in-out property <int> group-count: 0;
+    in-out property <bool> con-stick: true;
+    in-out property <length> fields-h: 100px;
+    in-out property <length> afields-h: 100px;
+    in-out property <length> tools-h: 100px;
     in-out property <[Field]> fields;
     in-out property <bool> settings-dirty: false;
     in-out property <string> settings-search: "";
@@ -854,6 +1020,14 @@ export component App inherits Window {
     in-out property <string> ov-public: "Looking up...";
     in-out property <bool> ov-nf: false;
     in-out property <float> ov-mem-frac: 0;
+    in-out property <int> ov-maxp: 20;
+    in-out property <int> ov-peak: 0;
+    in-out property <string> ov-tps: "-";
+    in-out property <string> ov-tps-label: "";
+    in-out property <int> ov-tps-lvl: 3;
+    in-out property <string> ov-tps-path: "";
+    in-out property <string> ov-world: "-";
+    in-out property <string> ov-free: "";
     in-out property <bool> nf-open: false;
     in-out property <string> nf-msg: "";
     in-out property <string> nf-current: "";
@@ -1022,7 +1196,7 @@ export component App inherits Window {
                             Rectangle { width: 48px; height: 48px; border-radius: 13px; background: Theme.accent; Image { source: @image-url("../assets/icons/server.svg"); width: 24px; height: 24px; x: 12px; y: 12px; colorize: Theme.on-accent; } }
                             VerticalLayout {
                                 alignment: center;
-                                Text { text: "Create Panel"; color: Theme.text; font-size: 24px; font-weight: 800; }
+                                Text { text: "Slate Server"; color: Theme.text; font-size: 24px; font-weight: 800; }
                                 Text { text: "Your Minecraft servers, in one app."; color: Theme.mute; }
                             }
                         }
@@ -1275,7 +1449,6 @@ export component App inherits Window {
                 NavItem { label: "Backups"; icon: @image-url("../assets/icons/archive.svg"); active: root.tab == "backups"; clicked => { root.show-tab("backups"); } }
                 NavItem { label: "Tools"; icon: @image-url("../assets/icons/wand.svg"); active: root.tab == "tools"; clicked => { root.show-tab("tools"); } }
                 NavItem { label: "Settings"; icon: @image-url("../assets/icons/sliders.svg"); active: root.tab == "settings"; clicked => { root.show-tab("settings"); } }
-                NavItem { label: "Options"; icon: @image-url("../assets/icons/sliders.svg"); active: root.tab == "options"; clicked => { root.show-tab("options"); } }
                 Rectangle { vertical-stretch: 1; }
                 Text { text: root.where-text; color: Theme.faint; font-size: 11px; wrap: word-wrap; }
             }
@@ -1329,10 +1502,10 @@ export component App inherits Window {
                     alignment: start;
                     HorizontalLayout {
                         spacing: 16px;
-                        MetricTile { title: "Players"; value: root.server-players == "" ? "0" : root.server-players; sub: root.server-state == "online" ? "online right now" : "server is offline"; }
-                        MetricTile { title: "Memory"; value: root.ov-mem; frac: root.server-state == "online" ? root.ov-mem-frac : -1; sub: "Port " + root.ov-port; }
-                        MetricTile { title: "Uptime"; value: root.ov-uptime; sub: "Mods " + root.ov-mods; }
-                        MetricTile { title: "Last backup"; value: root.ov-backup; sub: "World safety net"; }
+                        MetricTile { title: "Players"; value: "\{root.online.length}"; suffix: "of \{root.ov-maxp}"; sub: "Most today: \{root.ov-peak}"; spark: root.g-ply; spark-color: Theme.accent; }
+                        MetricTile { title: "Memory"; value: root.ov-mem; frac: root.server-state == "online" ? root.ov-mem-frac : -1; sub: root.server-state == "online" ? "Up " + root.ov-uptime + "  ·  " + root.ov-mods + " mods" : "Server is offline"; }
+                        MetricTile { title: "Ticks per second"; value: root.ov-tps; sub: root.ov-tps-label; sub-color: root.ov-tps-lvl == 0 ? Theme.good : (root.ov-tps-lvl == 1 ? Theme.warn : (root.ov-tps-lvl == 2 ? Theme.bad : Theme.faint)); spark: root.ov-tps-path; spark-color: root.ov-tps-lvl == 2 ? Theme.bad : (root.ov-tps-lvl == 1 ? Theme.warn : Theme.good); }
+                        MetricTile { title: "World size"; value: root.ov-world; sub: "Last backup " + root.ov-backup + (root.ov-free != "" ? "  ·  " + root.ov-free + " free" : ""); }
                     }
                     if root.ov-nf: Rectangle {
                         height: 48px;
@@ -1389,6 +1562,7 @@ export component App inherits Window {
                                     Chip { label: root.con-errs > 0 ? "Errors \{root.con-errs}" : "Errors"; active: root.con-filter == "error"; clicked => { root.con-filter = "error"; root.con-refilter(); } }
                                     Chip { label: "Chat"; active: root.con-filter == "chat"; clicked => { root.con-filter = "chat"; root.con-refilter(); } }
                                     Rectangle { horizontal-stretch: 1; }
+                                    Chip { label: root.con-auto ? "Live" : "Paused"; active: root.con-auto; clicked => { root.con-auto = !root.con-auto; root.con-stick = true; } }
                                     Btn { label: "Copy"; height: 30px; clicked => { root.con-copy(); } }
                                     Btn { label: "Open"; height: 30px; clicked => { root.show-tab("console"); } }
                                 }
@@ -1400,20 +1574,10 @@ export component App inherits Window {
                                     border-color: Theme.line;
                                     clip: true;
                                     ListView {
-                                        changed viewport-height => { self.viewport-y = -(self.viewport-height - self.height); }
-                                        for l in root.con: Rectangle {
-                                            HorizontalLayout {
-                                                padding-left: 10px;
-                                                padding-right: 10px;
-                                                Text {
-                                                    text: l.text;
-                                                    font-family: "Menlo";
-                                                    font-size: 12px;
-                                                    wrap: word-wrap;
-                                                    color: l.kind == 1 ? #8fd0ff : (l.kind == 2 ? Theme.warn : (l.kind == 3 ? Theme.bad : (l.kind == 4 ? Theme.accent : (l.kind == 5 ? Theme.good : Theme.text))));
-                                                }
-                                            }
-                                        }
+                                        changed viewport-height => { if root.con-auto && root.con-stick { self.viewport-y = -(self.viewport-height - self.height); } }
+                                        init => { root.con-stick = true; }
+                            changed viewport-y => { root.con-stick = self.viewport-y >= -(self.viewport-height - self.height) - 12px; }
+                                        for l in root.con: LogRow { line: l; copy(t) => { root.con-copy-line(t); } }
                                     }
                                 }
                                 HorizontalLayout {
@@ -1427,56 +1591,8 @@ export component App inherits Window {
                             horizontal-stretch: 1;
                             min-width: 270px;
                             spacing: 16px;
-                            Panel {
-                                vertical-stretch: 1;
-                                VerticalLayout {
-                                    padding: 16px;
-                                    spacing: 8px;
-                                    HorizontalLayout {
-                                        VerticalLayout { alignment: center; Text { text: "Who's on"; color: Theme.text; font-size: 15px; font-weight: 700; } }
-                                        Rectangle { horizontal-stretch: 1; }
-                                        Btn { label: "Manage lists"; height: 28px; clicked => { root.show-tab("players"); } }
-                                    }
-                                    if root.online.length == 0: Text { text: root.server-state == "online" ? "Nobody is on right now." : "The server is offline."; color: Theme.mute; font-size: 13px; }
-                                    ListView {
-                                        vertical-stretch: 1;
-                                        for p in root.online: Rectangle {
-                                            height: 38px;
-                                            HorizontalLayout {
-                                                spacing: 10px;
-                                                VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 26px; } }
-                                                Text { text: p.name; color: Theme.text; font-weight: 600; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
-                                                Text { text: p.note; color: Theme.mute; font-size: 12px; vertical-alignment: center; }
-                                            }
-                                        }
-                                    }
-                                    HorizontalLayout {
-                                        spacing: 6px;
-                                        TextBox { placeholder: "Announce to everyone"; text <=> root.say-text; horizontal-stretch: 1; accepted(t) => { root.broadcast(t); root.say-text = ""; } }
-                                        Btn { label: "Send"; primary: true; clicked => { root.broadcast(root.say-text); root.say-text = ""; } }
-                                    }
-                                }
-                            }
-                            Panel {
-                                height: 176px;
-                                VerticalLayout {
-                                    padding: 16px;
-                                    spacing: 8px;
-                                    Text { text: "QUICK ACTIONS"; color: Theme.mute; font-size: 11px; font-weight: 700; }
-                                    HorizontalLayout { spacing: 8px;
-                                        Btn { label: "Save world"; height: 32px; horizontal-stretch: 1; enabled: root.server-state == "online"; clicked => { root.quick("save"); } }
-                                        Btn { label: "Back up"; height: 32px; horizontal-stretch: 1; clicked => { root.quick("backup"); } }
-                                    }
-                                    HorizontalLayout { spacing: 8px;
-                                        Btn { label: "Set day"; height: 32px; horizontal-stretch: 1; enabled: root.server-state == "online"; clicked => { root.quick("day"); } }
-                                        Btn { label: "Set night"; height: 32px; horizontal-stretch: 1; enabled: root.server-state == "online"; clicked => { root.quick("night"); } }
-                                    }
-                                    HorizontalLayout { spacing: 8px;
-                                        Btn { label: "Clear weather"; height: 32px; horizontal-stretch: 1; enabled: root.server-state == "online"; clicked => { root.quick("clear"); } }
-                                        Btn { label: "Restart"; height: 32px; horizontal-stretch: 1; enabled: root.server-state == "online"; clicked => { root.server-action(root.server-id, "restart"); } }
-                                    }
-                                }
-                            }
+                            WhoPanel { vertical-stretch: 1; online: root.online; state: root.server-state; say <=> root.say-text; manage => { root.show-tab("players"); } announce(t) => { root.broadcast(t); root.say-text = ""; } }
+                            QuickPanel { up: root.server-state == "online"; quick(k) => { root.quick(k); } restart => { root.server-action(root.server-id, "restart"); } }
                         }
                     }
                     HorizontalLayout {
@@ -1677,7 +1793,10 @@ export component App inherits Window {
             }
 
             // ------------------------------------------------ Console
-            if tab == "console": Panel {
+            if tab == "console": HorizontalLayout {
+                spacing: 16px;
+                Panel {
+                    horizontal-stretch: 1;
                 VerticalLayout {
                     padding: 16px;
                     spacing: 10px;
@@ -1735,22 +1854,10 @@ export component App inherits Window {
                         border-width: 1px;
                         border-color: Theme.line;
                         if !root.con-select: ListView {
-                            changed viewport-height => { if root.con-auto { self.viewport-y = -(self.viewport-height - self.height); } }
-                            for l in root.con: Rectangle {
-                                background: lta.has-hover ? Theme.accent.with-alpha(0.10) : transparent;
-                                HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
-                                    Text {
-                                        text: l.text;
-                                        font-family: "Menlo";
-                                        font-size: 12px;
-                                        wrap: word-wrap;
-                                        color: l.kind == 1 ? #8fd0ff : (l.kind == 2 ? Theme.warn : (l.kind == 3 ? Theme.bad : (l.kind == 4 ? Theme.accent : (l.kind == 5 ? Theme.good : Theme.text))));
-                                    }
-                                }
-                                lta := TouchArea { mouse-cursor: pointer; clicked => { root.con-copy-line(l.text); } }
-                            }
+                            changed viewport-height => { if root.con-auto && root.con-stick { self.viewport-y = -(self.viewport-height - self.height); } }
+                            init => { root.con-stick = true; }
+                            changed viewport-y => { root.con-stick = self.viewport-y >= -(self.viewport-height - self.height) - 12px; }
+                            for l in root.con: LogRow { line: l; copy(t) => { root.con-copy-line(t); } }
                         }
                         if root.con-select: TextEdit {
                             read-only: true;
@@ -1778,6 +1885,13 @@ export component App inherits Window {
                         Chip { label: "weather clear"; clicked => { root.send-cmd("weather clear"); } }
                         Rectangle { horizontal-stretch: 1; }
                     }
+                }
+            }
+                if root.width > 1240px: VerticalLayout {
+                    width: 270px;
+                    spacing: 16px;
+                    WhoPanel { vertical-stretch: 1; online: root.online; state: root.server-state; say <=> root.say-text; manage => { root.show-tab("players"); } announce(t) => { root.broadcast(t); root.say-text = ""; } }
+                    QuickPanel { up: root.server-state == "online"; quick(k) => { root.quick(k); } restart => { root.server-action(root.server-id, "restart"); } }
                 }
             }
 
@@ -1907,28 +2021,28 @@ export component App inherits Window {
                     }
                     if root.mods-view == "browse": VerticalLayout {
                         spacing: 12px;
+                        bs-timer := Timer { interval: 350ms; running: false; triggered => { self.running = false; root.br-search(); } }
                         Panel {
-                            height: root.br-need-key ? 156px : 102px;
+                            height: root.br-need-key ? 160px : 106px;
                             VerticalLayout {
                                 padding: 14px;
                                 spacing: 8px;
                                 alignment: start;
                                 HorizontalLayout {
                                     spacing: 8px;
-                                    TextBox { placeholder: "Search Modrinth / CurseForge..."; text <=> root.br-q; horizontal-stretch: 1; accepted(t) => { root.br-search(); } }
-                                    Btn { label: "Search"; primary: true; icon: @image-url("../assets/icons/search.svg"); clicked => { root.br-search(); } }
+                                    TextBox { placeholder: "Search mods as you type..."; text <=> root.br-q; horizontal-stretch: 1; edited(t) => { bs-timer.running = false; bs-timer.running = true; } accepted(t) => { bs-timer.running = false; root.br-search(); } }
                                 }
                                 HorizontalLayout {
                                     spacing: 6px;
                                     Chip { label: "Modrinth"; active: root.br-source == "modrinth"; clicked => { root.br-source = "modrinth"; root.br-search(); } }
                                     Chip { label: "CurseForge"; active: root.br-source == "curseforge"; clicked => { root.br-source = "curseforge"; root.br-search(); } }
-                                    Rectangle { width: 16px; }
+                                    Rectangle { width: 14px; }
                                     Chip { label: "Relevance"; active: root.br-sort == "relevance"; clicked => { root.br-sort = "relevance"; root.br-search(); } }
                                     Chip { label: "Downloads"; active: root.br-sort == "downloads"; clicked => { root.br-sort = "downloads"; root.br-search(); } }
                                     Chip { label: "Newest"; active: root.br-sort == "newest"; clicked => { root.br-sort = "newest"; root.br-search(); } }
                                     Chip { label: "Updated"; active: root.br-sort == "updated"; clicked => { root.br-sort = "updated"; root.br-search(); } }
-                                    ComboBox { model: root.br-cats; current-index <=> root.br-cat-index; width: 170px; selected(v) => { root.br-search(); } }
                                     Rectangle { horizontal-stretch: 1; }
+                                    ComboBox { model: root.br-cats; current-index <=> root.br-cat-index; width: 170px; selected(v) => { root.br-search(); } }
                                 }
                                 if root.br-need-key: HorizontalLayout {
                                     spacing: 8px;
@@ -1938,28 +2052,102 @@ export component App inherits Window {
                             }
                         }
                         if root.br-note != "": Text { text: root.br-note; color: Theme.warn; wrap: word-wrap; }
-                        Panel {
+                        if !root.br-detail-open: Panel {
                             vertical-stretch: 1;
-                            ListView {
-                                for r[i] in root.br: Rectangle {
-                                    height: 76px;
+                            VerticalLayout {
+                                Rectangle {
+                                    height: 52px;
                                     HorizontalLayout {
-                                        padding-left: 16px;
-                                        padding-right: 16px;
-                                        spacing: 12px;
-                                        VerticalLayout { alignment: center; Rectangle { width: 44px; height: 44px; border-radius: 10px; background: r.tint; clip: true; Text { text: r.letter; color: #101216; font-weight: 800; font-size: 19px; horizontal-alignment: center; vertical-alignment: center; } if root.br-has[i]: Image { source: root.br-icons[i]; width: 100%; height: 100%; image-fit: cover; } } }
-                                        VerticalLayout {
-                                            alignment: center;
-                                            horizontal-stretch: 1;
-                                            spacing: 2px;
-                                            HorizontalLayout { spacing: 8px; alignment: start; Text { text: r.name; color: Theme.text; font-weight: 700; overflow: elide; } Text { text: "by " + r.author + "  ·  " + r.downloads + " downloads"; color: Theme.mute; font-size: 12px; vertical-alignment: center; } }
-                                            Text { text: r.summary; color: Theme.mute; font-size: 12px; overflow: elide; }
+                                        padding-left: 18px;
+                                        padding-right: 14px;
+                                        spacing: 8px;
+                                        VerticalLayout { alignment: center; Text { text: root.br-sel-n == 0 ? "Tick mods to install or remove several at once" : "\{root.br-sel-n} selected"; color: root.br-sel-n == 0 ? Theme.mute : Theme.text; font-weight: root.br-sel-n == 0 ? 400 : 700; font-size: 13px; } }
+                                        Rectangle { horizontal-stretch: 1; }
+                                        if root.br-sel-n == 0: VerticalLayout { alignment: center; Btn { label: "Select all"; height: 30px; enabled: root.br.length > 0; clicked => { root.br-sel-all(true); } } }
+                                        if root.br-sel-n > 0: VerticalLayout { alignment: center; Btn { label: root.br-sel-new > 0 ? "Install \{root.br-sel-new}" : "Install"; primary: true; height: 30px; enabled: root.br-sel-new > 0 && !root.br-busy; clicked => { root.br-bulk("install"); } } }
+                                        if root.br-sel-n > 0: VerticalLayout { alignment: center; Btn { label: root.br-sel-inst > 0 ? "Uninstall \{root.br-sel-inst}" : "Uninstall"; danger: true; height: 30px; enabled: root.br-sel-inst > 0 && !root.br-busy; clicked => { root.br-bulk("uninstall"); } } }
+                                        if root.br-sel-n > 0: VerticalLayout { alignment: center; Btn { label: "Clear"; height: 30px; clicked => { root.br-sel-all(false); } } }
+                                    }
+                                    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.line; }
+                                }
+                                if root.br.length == 0: Text { text: root.br-note == "" ? "Type above to search, or pick a category." : ""; color: Theme.mute; horizontal-alignment: center; }
+                                ListView {
+                                    vertical-stretch: 1;
+                                    for r[i] in root.br: Rectangle {
+                                        height: 104px;
+                                        background: r.sel ? Theme.accent.with-alpha(0.07) : transparent;
+                                        Rectangle { y: parent.height - 1px; height: 1px; background: Theme.line.with-alpha(0.6); }
+                                        HorizontalLayout {
+                                            padding-left: 18px;
+                                            padding-right: 18px;
+                                            spacing: 14px;
+                                            VerticalLayout { alignment: center; Check { checked: r.sel; toggled => { root.br-sel(i, self.checked); } } }
+                                            VerticalLayout { alignment: center; Rectangle { width: 56px; height: 56px; border-radius: 12px; background: r.tint; clip: true; Text { text: r.letter; color: #101216; font-weight: 800; font-size: 22px; horizontal-alignment: center; vertical-alignment: center; } if root.br-has[i]: Image { source: root.br-icons[i]; width: 100%; height: 100%; image-fit: cover; } } }
+                                            Rectangle {
+                                                horizontal-stretch: 1;
+                                                VerticalLayout {
+                                                    alignment: center;
+                                                    spacing: 3px;
+                                                    HorizontalLayout {
+                                                        spacing: 8px;
+                                                        alignment: start;
+                                                        Text { text: r.name; color: Theme.text; font-weight: 700; font-size: 15px; overflow: elide; }
+                                                        if r.installed != "": Pill { label: "Installed " + r.installed; }
+                                                        if !r.compat: Pill { label: "Not for this server"; }
+                                                    }
+                                                    Text { text: "by " + r.author + "   ·   " + r.downloads + " downloads" + (r.cats != "" ? "   ·   " + r.cats : ""); color: Theme.faint; font-size: 12px; overflow: elide; }
+                                                    Text { text: r.summary; color: Theme.mute; font-size: 13px; wrap: word-wrap; overflow: elide; height: 36px; }
+                                                }
+                                                TouchArea { mouse-cursor: pointer; clicked => { root.br-detail(i); } }
+                                            }
+                                            VerticalLayout {
+                                                width: 112px;
+                                                alignment: center;
+                                                spacing: 6px;
+                                                if r.installed == "": Btn { label: r.manual ? "Manual only" : "Install"; primary: true; height: 32px; enabled: !r.manual && !root.br-busy; clicked => { root.br-install(r.id); } }
+                                                if r.installed != "": Btn { label: "Uninstall"; danger: true; height: 32px; enabled: !root.br-busy; clicked => { root.br-uninstall(r.file); } }
+                                                Btn { label: "Details"; height: 28px; clicked => { root.br-detail(i); } }
+                                            }
                                         }
-                                        if !r.compat: VerticalLayout { alignment: center; Pill { label: "Not for this server"; } }
-                                        if r.installed != "": VerticalLayout { alignment: center; Pill { label: "Installed " + r.installed; } }
-                                        VerticalLayout { alignment: center; Btn { label: r.manual ? "Manual only" : "Install"; primary: true; height: 30px; enabled: r.installed == "" && !r.manual && !root.br-busy; clicked => { root.br-install(r.id); } } }
                                     }
                                 }
+                            }
+                        }
+                        if root.br-detail-open: Panel {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 12px;
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    VerticalLayout { alignment: center; Btn { label: "Back to results"; height: 32px; clicked => { root.br-detail-open = false; } } }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    if root.br-d-installed == "": VerticalLayout { alignment: center; Btn { label: "Install"; primary: true; height: 34px; enabled: !root.br-busy; clicked => { root.br-install(root.br-d-id); } } }
+                                    if root.br-d-installed != "": VerticalLayout { alignment: center; Btn { label: "Uninstall"; danger: true; height: 34px; enabled: !root.br-busy; clicked => { root.br-uninstall(root.br-d-installed); } } }
+                                }
+                                HorizontalLayout {
+                                    spacing: 14px;
+                                    VerticalLayout { alignment: center; Rectangle { width: 64px; height: 64px; border-radius: 14px; background: Theme.panel2; clip: true; Image { source: @image-url("../assets/icons/box.svg"); width: 28px; height: 28px; colorize: Theme.mute; } if root.br-has[root.br-d-index]: Image { source: root.br-icons[root.br-d-index]; width: 100%; height: 100%; image-fit: cover; } } }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        spacing: 3px;
+                                        horizontal-stretch: 1;
+                                        Text { text: root.br-d-name; color: Theme.text; font-size: 22px; font-weight: 700; overflow: elide; }
+                                        Text { text: "by " + root.br-d-author + (root.br-d-ver != "" ? "   ·   installed " + root.br-d-ver : ""); color: Theme.mute; font-size: 13px; overflow: elide; }
+                                    }
+                                }
+                                if root.br-d-meta != "": Rectangle {
+                                    background: Theme.panel2;
+                                    border-radius: 12px;
+                                    VerticalLayout { padding: 14px; Text { text: root.br-d-meta; color: Theme.text; font-size: 12.5px; wrap: word-wrap; } }
+                                }
+                                Text { text: "WHAT IT DOES"; color: Theme.mute; font-size: 11px; font-weight: 700; }
+                                if root.br-d-loading: Text { text: "Loading the full description..."; color: Theme.mute; }
+                                ScrollView {
+                                    vertical-stretch: 1;
+                                    VerticalLayout { alignment: start; Text { text: root.br-d-body; color: Theme.text.with-alpha(0.9); font-size: 14px; wrap: word-wrap; } }
+                                }
+                                if root.br-d-url != "": Text { text: root.br-d-url; color: Theme.faint; font-size: 12px; overflow: elide; }
                             }
                         }
                     }
@@ -1974,7 +2162,7 @@ export component App inherits Window {
                             VerticalLayout {
                                 horizontal-stretch: 1;
                                 alignment: center;
-                                Text { text: "Datapacks"; color: Theme.text; font-size: 20px; font-weight: 800; }
+                                Text { text: "Datapacks"; color: Theme.text; font-size: 15px; font-weight: 700; }
                                 Text { text: root.dp-note; color: Theme.mute; font-size: 12px; overflow: elide; }
                             }
                             VerticalLayout { alignment: center; Btn { label: "Add datapack"; icon: @image-url("../assets/icons/plus.svg"); primary: true; clicked => { root.dp-add(); } } }
@@ -2101,168 +2289,154 @@ export component App inherits Window {
             // ------------------------------------------------ Players
             if tab == "players": ScrollView {
                 VerticalLayout {
-                    spacing: 14px;
+                    spacing: 16px;
                     alignment: start;
-                    HorizontalLayout {
+                    Seg { width: 300px; height: 38px; items: ["Players", "Lists & add"]; index: root.players-view == "people" ? 0 : 1; picked(i) => { root.players-view = i == 0 ? "people" : "lists"; } }
+                    if root.players-view == "people": VerticalLayout {
                         spacing: 16px;
-                        MetricTile { title: "Online now"; value: "\{root.online.length}"; sub: "of \{root.pstats.length} seen so far"; }
-                        MetricTile { title: "Whitelisted"; value: "\{root.wl.length}"; sub: "allowed to join"; }
-                        MetricTile { title: "Operators"; value: "\{root.ops.length}"; sub: "can run commands"; }
-                        MetricTile { title: "Banned"; value: "\{root.banned.length}"; sub: "blocked"; }
-                    }
-                    Panel {
-                        height: 96px;
-                        VerticalLayout {
-                            padding: 18px;
-                            spacing: 8px;
-                            Text { text: "ADD OR REMOVE A PLAYER"; color: Theme.mute; font-size: 11px; font-weight: 700; }
-                            HorizontalLayout {
-                                spacing: 8px;
-                                TextBox { placeholder: "Player name"; text <=> root.player-name; horizontal-stretch: 1; }
-                                TextBox { placeholder: "Ban reason (optional)"; text <=> root.ban-reason; width: 200px; }
-                                Btn { label: "Whitelist"; clicked => { root.player-do("whitelist", root.player-name); } }
-                                Btn { label: "Op"; clicked => { root.player-do("op", root.player-name); } }
-                                Btn { label: "Ban"; danger: true; clicked => { root.player-do("ban", root.player-name); } }
-                                Btn { label: "Pardon"; clicked => { root.player-do("pardon", root.player-name); } }
-                            }
+                        HorizontalLayout {
+                            spacing: 16px;
+                            MetricTile { title: "Online now"; value: "\{root.online.length}"; sub: "of \{root.pstats.length} seen so far"; }
+                            MetricTile { title: "Whitelisted"; value: "\{root.wl.length}"; sub: "allowed to join"; }
+                            MetricTile { title: "Operators"; value: "\{root.ops.length}"; sub: "can run commands"; }
+                            MetricTile { title: "Banned"; value: "\{root.banned.length}"; sub: "blocked"; }
                         }
-                    }
-                    Panel {
-                        height: 430px;
-                        VerticalLayout {
-                            padding: 16px;
-                            spacing: 8px;
-                            HorizontalLayout {
-                                Text { text: "Everyone who has played"; color: Theme.text; font-size: 15px; font-weight: 700; horizontal-stretch: 1; }
-                                Text { text: root.pstats-note; color: Theme.mute; font-size: 12px; vertical-alignment: center; }
-                            }
-                            HorizontalLayout {
-                                spacing: 10px;
-                                padding-left: 36px;
-                                Text { text: "PLAYER"; color: Theme.mute; font-size: 10px; font-weight: 700; horizontal-stretch: 1; }
-                                Text { text: "PLAYTIME"; color: Theme.mute; font-size: 10px; font-weight: 700; width: 74px; }
-                                Text { text: "JOINS"; color: Theme.mute; font-size: 10px; font-weight: 700; width: 44px; }
-                                Text { text: "LAST SEEN"; color: Theme.mute; font-size: 10px; font-weight: 700; width: 92px; }
-                                Rectangle { width: 280px; }
-                            }
-                            if root.pstats.length == 0: Text { text: "No play time recorded yet. It builds up while the server is running."; color: Theme.mute; }
-                            ListView {
-                                vertical-stretch: 1;
+                        Panel {
+                            height: root.pstats.length * 58px + 96px;
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 6px;
+                                alignment: start;
+                                HorizontalLayout {
+                                    Text { text: "Everyone who has played"; color: Theme.text; font-size: 15px; font-weight: 700; horizontal-stretch: 1; }
+                                    Text { text: root.pstats-note; color: Theme.mute; font-size: 12px; vertical-alignment: center; }
+                                }
+                                if root.pstats.length == 0: Text { text: "No play time recorded yet. It builds up while the server is running."; color: Theme.mute; }
                                 for p in root.pstats: Rectangle {
-                                    height: 50px;
-                                    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.line; }
+                                    height: 58px;
+                                    Rectangle { y: 0px; height: 1px; background: Theme.line; }
                                     HorizontalLayout {
-                                        spacing: 10px;
+                                        spacing: 12px;
                                         HorizontalLayout {
-                                            spacing: 10px;
+                                            spacing: 12px;
                                             horizontal-stretch: 1;
-                                            VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 28px; } }
+                                            VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 32px; } }
                                             VerticalLayout {
                                                 alignment: center;
-                                                spacing: 1px;
+                                                spacing: 2px;
                                                 HorizontalLayout {
                                                     spacing: 7px;
-                                                    Text { text: p.name; color: Theme.text; font-weight: 700; vertical-alignment: center; overflow: elide; }
+                                                    Text { text: p.name; color: Theme.text; font-weight: 700; font-size: 14px; vertical-alignment: center; overflow: elide; }
                                                     if p.online: VerticalLayout { alignment: center; Rectangle { width: 8px; height: 8px; border-radius: 4px; background: Theme.good; } }
                                                 }
-                                                if p.tags != "": Text { text: p.tags; color: Theme.faint; font-size: 11px; overflow: elide; }
+                                                Text { text: (p.online ? "Online now" : "Last seen " + p.last) + "  ·  " + p.playtime + " played  ·  " + p.joins + " joins"; color: Theme.mute; font-size: 12px; overflow: elide; }
+                                                if p.tags != "": Text { text: p.tags; color: Theme.accent; font-size: 11px; font-weight: 600; overflow: elide; }
                                             }
                                         }
-                                        Text { text: p.playtime; color: Theme.text; width: 74px; vertical-alignment: center; }
-                                        Text { text: p.joins; color: Theme.text; width: 44px; vertical-alignment: center; }
-                                        Text { text: p.online ? "online now" : p.last; color: p.online ? Theme.good : Theme.mute; width: 92px; vertical-alignment: center; }
                                         HorizontalLayout {
                                             spacing: 6px;
-                                            width: 280px;
                                             alignment: end;
-                                            VerticalLayout { alignment: center; Btn { label: "Op"; height: 26px; clicked => { root.player-do("op", p.name); } } }
-                                            VerticalLayout { alignment: center; Btn { label: "Whitelist"; height: 26px; clicked => { root.player-do("whitelist", p.name); } } }
-                                            if p.online: VerticalLayout { alignment: center; Btn { label: "Kick"; height: 26px; clicked => { root.player-do("kick", p.name); } } }
-                                            VerticalLayout { alignment: center; Btn { label: "Ban"; danger: true; height: 26px; clicked => { root.player-do("ban", p.name); } } }
+                                            VerticalLayout { alignment: center; Btn { label: p.op ? "Deop" : "Op"; height: 28px; clicked => { root.player-do(p.op ? "deop" : "op", p.name); } } }
+                                            VerticalLayout { alignment: center; Btn { label: p.wl ? "Unlist" : "Whitelist"; height: 28px; clicked => { root.player-do(p.wl ? "unwhitelist" : "whitelist", p.name); } } }
+                                            if p.online: VerticalLayout { alignment: center; Btn { label: "Kick"; height: 28px; clicked => { root.player-do("kick", p.name); } } }
+                                            VerticalLayout { alignment: center; Btn { label: p.banned ? "Pardon" : "Ban"; danger: !p.banned; height: 28px; clicked => { root.player-do(p.banned ? "pardon" : "ban", p.name); } } }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    HorizontalLayout {
-                        spacing: 14px;
+                    if root.players-view == "lists": VerticalLayout {
+                        spacing: 16px;
                         Panel {
-                            horizontal-stretch: 1;
-                            height: 300px;
+                            height: 100px;
                             VerticalLayout {
-                                padding: 16px;
-                                spacing: 6px;
-                                Text { text: "WHITELIST  ·  \{root.wl.length}"; color: Theme.mute; font-size: 11px; font-weight: 700; }
-                                if root.wl.length == 0: Text { text: "Nobody yet."; color: Theme.faint; font-size: 13px; }
-                                ListView {
-                                    vertical-stretch: 1;
+                                padding: 18px;
+                                spacing: 8px;
+                                Text { text: "ADD A PLAYER BY NAME"; color: Theme.mute; font-size: 11px; font-weight: 700; }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    TextBox { placeholder: "Player name"; text <=> root.player-name; horizontal-stretch: 1; }
+                                    TextBox { placeholder: "Ban reason (optional)"; text <=> root.ban-reason; width: 200px; }
+                                    Btn { label: "Whitelist"; clicked => { root.player-do("whitelist", root.player-name); } }
+                                    Btn { label: "Op"; clicked => { root.player-do("op", root.player-name); } }
+                                    Btn { label: "Ban"; danger: true; clicked => { root.player-do("ban", root.player-name); } }
+                                }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 16px;
+                            Panel {
+                                horizontal-stretch: 1;
+                                height: Math.max(Math.max(root.wl.length, root.ops.length), root.banned.length) * 46px + 78px;
+                                VerticalLayout {
+                                    padding: 16px;
+                                    spacing: 4px;
+                                    alignment: start;
+                                    Text { text: "WHITELIST  ·  \{root.wl.length}"; color: Theme.mute; font-size: 11px; font-weight: 700; }
+                                    if root.wl.length == 0: Text { text: "Nobody yet."; color: Theme.faint; font-size: 13px; }
                                     for p in root.wl: Rectangle {
-                                        height: 42px;
+                                        height: 46px;
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 24px; } }
+                                            VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 26px; } }
                                             VerticalLayout {
                                                 alignment: center;
                                                 horizontal-stretch: 1;
                                                 Text { text: p.name; color: Theme.text; font-weight: 600; overflow: elide; }
                                                 
                                             }
-                                            VerticalLayout { alignment: center; Btn { label: "Remove"; height: 26px; clicked => { root.player-do("unwhitelist", p.name); } } }
+                                            VerticalLayout { alignment: center; Btn { label: "Remove"; height: 28px; clicked => { root.player-do("unwhitelist", p.name); } } }
                                         }
                                     }
                                 }
                             }
-                        }
-                        Panel {
-                            horizontal-stretch: 1;
-                            height: 300px;
-                            VerticalLayout {
-                                padding: 16px;
-                                spacing: 6px;
-                                Text { text: "OPERATORS  ·  \{root.ops.length}"; color: Theme.mute; font-size: 11px; font-weight: 700; }
-                                if root.ops.length == 0: Text { text: "Nobody yet."; color: Theme.faint; font-size: 13px; }
-                                ListView {
-                                    vertical-stretch: 1;
+                            Panel {
+                                horizontal-stretch: 1;
+                                height: Math.max(Math.max(root.wl.length, root.ops.length), root.banned.length) * 46px + 78px;
+                                VerticalLayout {
+                                    padding: 16px;
+                                    spacing: 4px;
+                                    alignment: start;
+                                    Text { text: "OPERATORS  ·  \{root.ops.length}"; color: Theme.mute; font-size: 11px; font-weight: 700; }
+                                    if root.ops.length == 0: Text { text: "Nobody yet."; color: Theme.faint; font-size: 13px; }
                                     for p in root.ops: Rectangle {
-                                        height: 42px;
+                                        height: 46px;
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 24px; } }
+                                            VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 26px; } }
                                             VerticalLayout {
                                                 alignment: center;
                                                 horizontal-stretch: 1;
                                                 Text { text: p.name; color: Theme.text; font-weight: 600; overflow: elide; }
                                                 
                                             }
-                                            VerticalLayout { alignment: center; Btn { label: "Remove"; height: 26px; clicked => { root.player-do("deop", p.name); } } }
+                                            VerticalLayout { alignment: center; Btn { label: "Remove"; height: 28px; clicked => { root.player-do("deop", p.name); } } }
                                         }
                                     }
                                 }
                             }
-                        }
-                        Panel {
-                            horizontal-stretch: 1;
-                            height: 300px;
-                            VerticalLayout {
-                                padding: 16px;
-                                spacing: 6px;
-                                Text { text: "BANNED  ·  \{root.banned.length}"; color: Theme.mute; font-size: 11px; font-weight: 700; }
-                                if root.banned.length == 0: Text { text: "Nobody yet."; color: Theme.faint; font-size: 13px; }
-                                ListView {
-                                    vertical-stretch: 1;
+                            Panel {
+                                horizontal-stretch: 1;
+                                height: Math.max(Math.max(root.wl.length, root.ops.length), root.banned.length) * 46px + 78px;
+                                VerticalLayout {
+                                    padding: 16px;
+                                    spacing: 4px;
+                                    alignment: start;
+                                    Text { text: "BANNED  ·  \{root.banned.length}"; color: Theme.mute; font-size: 11px; font-weight: 700; }
+                                    if root.banned.length == 0: Text { text: "Nobody yet."; color: Theme.faint; font-size: 13px; }
                                     for p in root.banned: Rectangle {
-                                        height: 42px;
+                                        height: 46px;
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 24px; } }
+                                            VerticalLayout { alignment: center; Head { src: p.head; has: p.has-head; size: 26px; } }
                                             VerticalLayout {
                                                 alignment: center;
                                                 horizontal-stretch: 1;
                                                 Text { text: p.name; color: Theme.text; font-weight: 600; overflow: elide; }
-                                                Text { text: p.note; color: Theme.faint; font-size: 11px; overflow: elide; }
+                                                if p.note != "": Text { text: p.note; color: Theme.faint; font-size: 11px; overflow: elide; }
                                             }
-                                            VerticalLayout { alignment: center; Btn { label: "Pardon"; height: 26px; clicked => { root.player-do("pardon", p.name); } } }
+                                            VerticalLayout { alignment: center; Btn { label: "Pardon"; height: 28px; clicked => { root.player-do("pardon", p.name); } } }
                                         }
                                     }
                                 }
@@ -2303,15 +2477,22 @@ export component App inherits Window {
                     vertical-stretch: 1;
                     ListView {
                         for b in root.backups: Rectangle {
-                            height: 48px;
+                            height: 62px;
+                            Rectangle { y: parent.height - 1px; height: 1px; background: Theme.line.with-alpha(0.6); }
                             HorizontalLayout {
-                                padding-left: 16px;
-                                padding-right: 16px;
-                                spacing: 10px;
-                                Text { text: b.name; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
-                                Text { text: b.size; color: Theme.mute; vertical-alignment: center; }
-                                VerticalLayout { alignment: center; Btn { label: "Download"; height: 28px; clicked => { root.backup-download(b.name); } } }
-                                VerticalLayout { alignment: center; Btn { label: "Delete"; danger: true; height: 28px; clicked => { root.backup-delete(b.name); } } }
+                                padding-left: 18px;
+                                padding-right: 18px;
+                                spacing: 14px;
+                                VerticalLayout { alignment: center; Rectangle { width: 36px; height: 36px; border-radius: 10px; background: Theme.accent.with-alpha(0.14); Image { source: @image-url("../assets/icons/archive.svg"); width: 18px; height: 18px; colorize: Theme.accent; } } }
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    spacing: 2px;
+                                    Text { text: b.name; color: Theme.text; font-weight: 600; overflow: elide; }
+                                    Text { text: b.size; color: Theme.mute; font-size: 12px; }
+                                }
+                                VerticalLayout { alignment: center; Btn { label: "Download"; height: 30px; clicked => { root.backup-download(b.name); } } }
+                                VerticalLayout { alignment: center; Btn { label: "Delete"; danger: true; height: 30px; clicked => { root.backup-delete(b.name); } } }
                             }
                         }
                     }
@@ -2319,8 +2500,10 @@ export component App inherits Window {
             }
 
             // ------------------------------------------------ Tools
-            if tab == "tools": VerticalLayout {
+            if tab == "tools": ScrollView {
+              VerticalLayout {
                 spacing: 12px;
+                alignment: start;
                 Panel {
                     height: 60px;
                     HorizontalLayout {
@@ -2356,101 +2539,160 @@ export component App inherits Window {
                     }
                 }
                 Panel {
-                    vertical-stretch: 1;
+                    height: root.tools-h;
                     FieldList { rows: root.tools; edited(k, v) => { root.tools-edit(k, v); } toggle(n) => { } act(a, k) => { root.tools-act(k); } }
                 }
             }
+            }
 
             // ------------------------------------------------ Settings
-            if tab == "settings": VerticalLayout {
-                spacing: 12px;
-                Seg { width: 380px; height: 38px; items: ["Server & look", "Automation & updates"]; index: root.set-tab == "server" ? 0 : 1; picked(i) => { root.set-set-tab(i == 0 ? "server" : "auto"); } }
-                if root.set-tab == "server": VerticalLayout {
-                    spacing: 12px;
+            if tab == "settings": HorizontalLayout {
+                spacing: 18px;
+                VerticalLayout {
+                    width: 232px;
+                    alignment: start;
                     Panel {
-                        height: 72px;
-                        HorizontalLayout {
-                            padding: 16px;
-                            spacing: 10px;
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                alignment: center;
-                                Text { text: "Server settings"; color: Theme.text; font-size: 15px; font-weight: 700; }
-                                Text { text: "Memory, Java options and server.properties, all in one place."; color: Theme.mute; font-size: 12px; }
-                            }
-                            VerticalLayout { alignment: center; Btn { label: "Discard changes"; enabled: root.settings-dirty; clicked => { root.settings-discard(); } } }
-                            VerticalLayout { alignment: center; Btn { label: "Save changes"; primary: true; enabled: root.settings-dirty; clicked => { root.settings-save(); } } }
+                        height: root.groups.length * 38px + 4 * 38px + 120px;
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 2px;
+                            alignment: start;
+                            HorizontalLayout { padding-left: 4px; Text { text: "SERVER PROPERTIES"; color: Theme.mute; font-size: 10px; font-weight: 700; } }
+                            Rectangle { height: 4px; }
+                            for g in root.groups: SubNav { label: g.label; badge: "\{g.count}"; active: root.set-tab == "server" && g.open; clicked => { if root.set-tab != "server" { root.set-set-tab("server"); } root.group-toggle(g.label); } }
+                            Rectangle { height: 14px; }
+                            HorizontalLayout { padding-left: 4px; Text { text: "MORE"; color: Theme.mute; font-size: 10px; font-weight: 700; } }
+                            Rectangle { height: 4px; }
+                            SubNav { label: "Look"; active: root.set-tab == "look"; clicked => { root.set-set-tab("look"); } }
+                            SubNav { label: "Automation & updates"; active: root.set-tab == "auto"; clicked => { root.set-set-tab("auto"); } }
+                            SubNav { label: "Manage server"; active: root.set-tab == "manage"; clicked => { root.set-set-tab("manage"); } }
                         }
-                    }
-                    if root.note != "": Text { text: root.note; color: Theme.warn; wrap: word-wrap; }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        TextBox { placeholder: "Search settings, e.g. pvp, view distance, whitelist..."; text <=> root.settings-search; horizontal-stretch: 1; edited(t) => { root.settings-refilter(); } }
-                        Btn { label: "Expand all"; clicked => { root.groups-all(true); } }
-                        Btn { label: "Collapse all"; clicked => { root.groups-all(false); } }
-                    }
-                    Panel {
-                        vertical-stretch: 1;
-                        FieldList { rows: root.fields; edited(k, v) => { root.field-edited(k, v); } toggle(n) => { root.group-toggle(n); } act(a, k) => { } }
-                    }
-                    Panel {
-                        height: 330px;
-                        ThemePicker { padding: 20px; }
                     }
                 }
-                if root.set-tab == "auto": VerticalLayout {
-                    spacing: 12px;
-                    Panel {
-                        height: 72px;
-                        HorizontalLayout {
-                            padding: 16px;
-                            spacing: 10px;
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                alignment: center;
-                                Text { text: "Automation & updates"; color: Theme.text; font-size: 15px; font-weight: 700; }
-                                Text { text: "Scheduled tasks, idle shutdown, welcome message, Discord alerts and mod updates."; color: Theme.mute; font-size: 12px; overflow: elide; }
+                ScrollView {
+                    horizontal-stretch: 1;
+                    VerticalLayout {
+                        spacing: 14px;
+                        alignment: start;
+                        if (root.set-tab == "server" && root.settings-dirty) || (root.set-tab == "auto" && root.auto-dirty): Rectangle {
+                            height: 54px;
+                            border-radius: 12px;
+                            background: Theme.accent.with-alpha(0.14);
+                            border-width: 1px;
+                            border-color: Theme.accent.with-alpha(0.4);
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 12px;
+                                spacing: 8px;
+                                Text { text: "You have unsaved changes"; color: Theme.text; font-weight: 600; vertical-alignment: center; horizontal-stretch: 1; }
+                                VerticalLayout { alignment: center; Btn { label: "Discard"; height: 32px; clicked => { if root.set-tab == "server" { root.settings-discard(); } else { root.auto-discard(); } } } }
+                                VerticalLayout { alignment: center; Btn { label: "Save changes"; primary: true; height: 32px; clicked => { if root.set-tab == "server" { root.settings-save(); } else { root.auto-save(); } } } }
                             }
-                            VerticalLayout { alignment: center; Btn { label: "Discard changes"; enabled: root.auto-dirty; clicked => { root.auto-discard(); } } }
-                            VerticalLayout { alignment: center; Btn { label: "Save changes"; primary: true; enabled: root.auto-dirty; clicked => { root.auto-save(); } } }
                         }
-                    }
-                    if root.auto-msg != "": Text { text: root.auto-msg; color: Theme.warn; wrap: word-wrap; }
-                    Panel {
-                        vertical-stretch: 1;
-                        FieldList { rows: root.afields; edited(k, v) => { root.auto-edited(k, v); } toggle(n) => { root.auto-group(n); } act(a, k) => { root.auto-act(a, k); } }
+                        if root.note != "": Text { text: root.note; color: Theme.warn; wrap: word-wrap; }
+                        if root.set-tab == "server": VerticalLayout {
+                            spacing: 12px;
+                            HorizontalLayout {
+                                spacing: 12px;
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    Text { text: root.group-title; color: Theme.text; font-size: 22px; font-weight: 700; }
+                                    Text { text: root.settings-search == "" ? "\{root.group-count} settings in server.properties and launch options" : "Matching settings from every category"; color: Theme.mute; font-size: 12px; }
+                                }
+                                TextBox { placeholder: "Search every setting..."; text <=> root.settings-search; width: 240px; edited(t) => { root.settings-refilter(); } }
+                            }
+                            Panel {
+                                height: root.fields-h;
+                                FieldList { rows: root.fields; edited(k, v) => { root.field-edited(k, v); } toggle(n) => { root.group-toggle(n); } act(a, k) => { } }
+                            }
+                        }
+                        if root.set-tab == "look": VerticalLayout {
+                            spacing: 12px;
+                            Text { text: "Look"; color: Theme.text; font-size: 22px; font-weight: 700; }
+                            Text { text: "Pick the accent colour and surface style. Changes apply to the whole app straight away."; color: Theme.mute; font-size: 12px; }
+                            Panel {
+                                height: 340px;
+                                ThemePicker { padding: 22px; }
+                            }
+                        }
+                        if root.set-tab == "auto": VerticalLayout {
+                            spacing: 12px;
+                            Text { text: "Automation & updates"; color: Theme.text; font-size: 22px; font-weight: 700; }
+                            Text { text: "Scheduled tasks, idle shutdown, welcome message, Discord alerts and mod updates."; color: Theme.mute; font-size: 12px; wrap: word-wrap; }
+                            if root.auto-msg != "": Text { text: root.auto-msg; color: Theme.warn; wrap: word-wrap; }
+                            Panel {
+                                height: root.afields-h;
+                                FieldList { rows: root.afields; edited(k, v) => { root.auto-edited(k, v); } toggle(n) => { root.auto-group(n); } act(a, k) => { root.auto-act(a, k); } }
+                            }
+                        }
+                        if root.set-tab == "manage": VerticalLayout {
+                            spacing: 12px;
+                            Text { text: "Manage server"; color: Theme.text; font-size: 22px; font-weight: 700; }
+                            Text { text: "Name, crash recovery and removal."; color: Theme.mute; font-size: 12px; }
+                            Panel {
+                                height: 148px;
+                                VerticalLayout {
+                                    alignment: start;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 14px;
+                                VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px; Text { text: "Restart automatically if it crashes"; color: Theme.text; font-weight: 700; } Text { text: "If the server stops on its own, the panel starts it again."; color: Theme.mute; font-size: 12px; wrap: word-wrap; } }
+                                VerticalLayout { alignment: center; Toggle { checked: root.auto-restart; toggled => { root.set-auto-restart(self.checked); } } }
+                            }
+                                    Rectangle { height: 1px; background: Theme.line.with-alpha(0.6); }
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 14px;
+                                VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px; Text { text: "Force stop"; color: Theme.text; font-weight: 700; } Text { text: "Kills the server process. Use only if Stop does nothing."; color: Theme.mute; font-size: 12px; wrap: word-wrap; } }
+                                VerticalLayout { alignment: center; ConfirmBtn { label: "Force stop"; enabled: root.server-state != "stopped"; confirmed => { root.server-action(root.server-id, "kill"); } } }
+                            }
+                                }
+                            }
+                            Panel {
+                                height: 86px;
+                                HorizontalLayout {
+                                    padding: 16px;
+                                    spacing: 14px;
+                                    VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px; Text { text: "Name"; color: Theme.text; font-weight: 700; } Text { text: "Shown on the hub and in the header."; color: Theme.mute; font-size: 12px; } }
+                                    VerticalLayout { alignment: center; rn := TextBox { text: root.server-name; width: 240px; } }
+                                    VerticalLayout { alignment: center; Btn { label: "Save name"; clicked => { root.rename-server(root.server-id, rn.text); } } }
+                                }
+                            }
+                            Panel {
+                                height: 86px;
+                                border-color: Theme.bad.with-alpha(0.35);
+                                HorizontalLayout {
+                                    padding: 16px;
+                                    spacing: 14px;
+                                    VerticalLayout { horizontal-stretch: 1; alignment: center; spacing: 2px; Text { text: "Remove from list"; color: Theme.bad; font-weight: 700; } Text { text: "Its files stay on disk. The server must be stopped first."; color: Theme.mute; font-size: 12px; } }
+                                    VerticalLayout { alignment: center; ConfirmBtn { label: "Remove"; enabled: root.server-state == "stopped"; confirmed => { root.remove-server(root.server-id); } } }
+                                }
+                            }
+                        }
                     }
                 }
             }
 
             // ------------------------------------------------ Options
-            if tab == "options": VerticalLayout {
-                spacing: 12px;
-                alignment: start;
-                Panel {
-                    height: 290px;
-                    VerticalLayout {
-                        padding: 18px;
-                        spacing: 12px;
-                        Text { text: "GENERAL"; color: Theme.mute; font-size: 11px; font-weight: 700; }
-                        HorizontalLayout { spacing: 12px; Toggle { checked: root.auto-restart; toggled => { root.set-auto-restart(self.checked); } } Text { text: "Restart the server automatically if it crashes"; color: Theme.text; vertical-alignment: center; } }
-                        ConfirmBtn { label: "Force stop (if it's stuck)"; enabled: root.server-state != "stopped"; confirmed => { root.server-action(root.server-id, "kill"); } }
-                        Text { text: "Rename"; color: Theme.text; font-weight: 700; }
-                        HorizontalLayout {
-                            spacing: 8px;
-                            rn := TextBox { text: root.server-name; horizontal-stretch: 1; }
-                            Btn { label: "Save name"; clicked => { root.rename-server(root.server-id, rn.text); } }
-                        }
-                        Text { text: "Remove this server from the list (its files stay on disk)"; color: Theme.mute; font-size: 12px; }
-                        ConfirmBtn { label: "Remove from list"; enabled: root.server-state == "stopped"; confirmed => { root.remove-server(root.server-id); } }
-                    }
-                }
-            }
+
         }
     }
 
     // ---------------------------------------------------------------- new server
-    if page == "new": VerticalLayout {
+    if page == "new": HorizontalLayout {
+        HubRail {
+            active: "hub";
+            ver-text: root.ver-text;
+            where-ip: root.where-ip;
+            where-alt: root.where-alt;
+            where-text: root.where-text;
+            hub-total: root.hub-total;
+            goto(k) => { root.go-hub-page(k); }
+            copy(t) => { root.copy-text(t); }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
         padding: 24px;
         spacing: 12px;
         alignment: start;
@@ -2472,14 +2714,27 @@ export component App inherits Window {
             Btn { label: "Add existing folder..."; clicked => { root.job-text = ""; root.page = "addexisting"; } }
             Btn { label: "Create"; primary: true; enabled: !root.job-busy; clicked => { root.create-server(root.new-name, root.new-loader, root.new-mc, root.new-ram); } }
         }
-    }
+            }
+}
 
     // ---------------------------------------------------------------- first-run setup
-    if page == "wizard": VerticalLayout {
+    if page == "wizard": HorizontalLayout {
+        HubRail {
+            active: "hub";
+            ver-text: root.ver-text;
+            where-ip: root.where-ip;
+            where-alt: root.where-alt;
+            where-text: root.where-text;
+            hub-total: root.hub-total;
+            goto(k) => { root.go-hub-page(k); }
+            copy(t) => { root.copy-text(t); }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
         padding: 24px;
         spacing: 12px;
         alignment: start;
-        Text { text: "Welcome to Create Panel"; color: Theme.text; font-size: 24px; font-weight: 800; }
+        Text { text: "Welcome to Slate Server"; color: Theme.text; font-size: 24px; font-weight: 800; }
         Text { text: "A few things to get this computer ready to host servers. Everything here is optional; you can come back from Settings."; color: Theme.mute; wrap: word-wrap; }
         Panel {
             height: 150px;
@@ -2528,10 +2783,23 @@ export component App inherits Window {
         Text { text: root.wz-msg; color: Theme.warn; wrap: word-wrap; }
         Text { text: root.mig-msg; color: Theme.mute; wrap: word-wrap; }
         HorizontalLayout { spacing: 8px; Btn { label: "Finish"; primary: true; clicked => { root.wz-finish(); } } }
-    }
+            }
+}
 
     // ---------------------------------------------------------------- add existing folder
-    if page == "addexisting": VerticalLayout {
+    if page == "addexisting": HorizontalLayout {
+        HubRail {
+            active: "hub";
+            ver-text: root.ver-text;
+            where-ip: root.where-ip;
+            where-alt: root.where-alt;
+            where-text: root.where-text;
+            hub-total: root.hub-total;
+            goto(k) => { root.go-hub-page(k); }
+            copy(t) => { root.copy-text(t); }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
         padding: 24px;
         spacing: 12px;
         alignment: start;
@@ -2543,10 +2811,23 @@ export component App inherits Window {
         TextBox { text <=> root.ex-name; placeholder: "My server"; }
         Text { text: root.job-text; color: Theme.warn; wrap: word-wrap; }
         HorizontalLayout { spacing: 8px; Btn { label: "Back"; clicked => { root.page = "new"; } } Btn { label: "Add it"; primary: true; clicked => { root.add-existing(root.ex-dir, root.ex-name); } } }
-    }
+            }
+}
 
     // ---------------------------------------------------------------- loader version picker
-    if page == "loaderpick": VerticalLayout {
+    if page == "loaderpick": HorizontalLayout {
+        HubRail {
+            active: "hub";
+            ver-text: root.ver-text;
+            where-ip: root.where-ip;
+            where-alt: root.where-alt;
+            where-text: root.where-text;
+            hub-total: root.hub-total;
+            goto(k) => { root.go-hub-page(k); }
+            copy(t) => { root.copy-text(t); }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
         padding: 24px;
         spacing: 12px;
         alignment: start;
@@ -2568,10 +2849,23 @@ export component App inherits Window {
         if root.lp-note != "": Text { text: root.lp-note; color: Theme.warn; wrap: word-wrap; }
         Text { text: root.lp-msg; color: Theme.mute; wrap: word-wrap; }
         HorizontalLayout { spacing: 8px; Btn { label: "Update"; primary: true; enabled: !root.lp-busy; clicked => { root.lp-go(); } } }
-    }
+            }
+}
 
     // ---------------------------------------------------------------- modpacks (Modrinth)
-    if page == "packs": VerticalLayout {
+    if page == "packs": HorizontalLayout {
+        HubRail {
+            active: "hub";
+            ver-text: root.ver-text;
+            where-ip: root.where-ip;
+            where-alt: root.where-alt;
+            where-text: root.where-text;
+            hub-total: root.hub-total;
+            goto(k) => { root.go-hub-page(k); }
+            copy(t) => { root.copy-text(t); }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
         padding: 24px;
         spacing: 12px;
         HorizontalLayout {
@@ -2621,10 +2915,23 @@ export component App inherits Window {
             }
         }
         Text { text: root.pk-msg; color: Theme.warn; wrap: word-wrap; }
-    }
+            }
+}
 
     // ---------------------------------------------------------------- import
-    if page == "import": VerticalLayout {
+    if page == "import": HorizontalLayout {
+        HubRail {
+            active: "hub";
+            ver-text: root.ver-text;
+            where-ip: root.where-ip;
+            where-alt: root.where-alt;
+            where-text: root.where-text;
+            hub-total: root.hub-total;
+            goto(k) => { root.go-hub-page(k); }
+            copy(t) => { root.copy-text(t); }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
         padding: 24px;
         spacing: 12px;
         alignment: start;
@@ -2636,7 +2943,8 @@ export component App inherits Window {
             Btn { label: "Back"; clicked => { root.page = "hub"; } }
             Btn { label: "Import now"; primary: true; clicked => { root.import-run(); } }
         }
-    }
+            }
+}
 
     // ---------------------------------------------------------------- hub backups + migrate
     if page == "hbackups": HorizontalLayout {

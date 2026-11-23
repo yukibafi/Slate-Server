@@ -238,7 +238,7 @@ fn autostart_enable() -> (bool, String) {
     if let Some(d) = p.parent() { let _ = fs::create_dir_all(d); }
     if let Some(d) = agent_log().parent() { let _ = fs::create_dir_all(d); }
     if let Err(e) = fs::write(&p, plist) { return (false, format!("Couldn't set that up: {e}")); }
-    (true, "Done. The Create Panel engine will start by itself whenever you log in to this Mac. Your servers keep running even when the app window is closed.".into())
+    (true, "Done. The Slate Server engine will start by itself whenever you log in to this Mac. Your servers keep running even when the app window is closed.".into())
 }
 fn autostart_disable() -> (bool, String) {
     let p = plist_path();

@@ -1,6 +1,6 @@
-# Update Create Panel on Windows from a new source zip: unpack, build, install, open.
+# Update Slate Server on Windows from a new source zip: unpack, build, install, open.
 # Usage: double-click update.bat, or: powershell -ExecutionPolicy Bypass -File update.ps1 [zip] [-Release] [-Installer]
-# -Installer also makes a proper Create-Panel-Setup.exe (Inno Setup, installed automatically with winget if missing) and runs it.
+# -Installer also makes a proper Slate-Server-Setup.exe (Inno Setup, installed automatically with winget if missing) and runs it.
 # Needs Rust (https://rustup.rs) and the "Desktop development with C++" build tools once.
 # Source and build cache live in %USERPROFILE%\.create-panel-build, so later runs only rebuild what changed.
 param([string]$Zip = "", [switch]$Release, [switch]$Installer)
@@ -16,7 +16,7 @@ try {
   if (-not $cargo -and (Test-Path "$env:USERPROFILE\.cargo\bin\cargo.exe")) { $env:PATH += ";$env:USERPROFILE\.cargo\bin"; $cargo = Get-Command cargo -ErrorAction SilentlyContinue }
   if (-not $cargo) { Write-Host "Rust (cargo) isn't installed. Get it from https://rustup.rs, then run this again."; Pause-Exit 1 }
   Write-Host "Using: $Zip"
-  Write-Host "This closes Create Panel while it updates."
+  Write-Host "This closes Slate Server while it updates."
   $a = Read-Host "Continue? (y/N)"; if ($a -ne "y" -and $a -ne "Y") { exit 0 }
   New-Item -ItemType Directory -Force $src | Out-Null
   if (Test-Path $Zip -PathType Container) { Get-ChildItem $Zip -Force | Where-Object { $_.Name -ne "target" -and $_.Name -ne ".git" } | Copy-Item -Destination $src -Recurse -Force } else { Expand-Archive -Path $Zip -DestinationPath $src -Force }
@@ -36,14 +36,14 @@ try {
     if (-not $iscc) { Write-Host "Couldn't get Inno Setup. Install it from https://jrsoftware.org/isdl.php and run again."; Pause-Exit 1 }
     $bin = Join-Path $env:CARGO_TARGET_DIR $mode
     & $iscc "/DBinDir=$bin" "/DGuiBinDir=$bin" (Join-Path $src "installer\create-panel.iss"); if ($LASTEXITCODE -ne 0) { Write-Host "Making the installer failed."; Pause-Exit 1 }
-    $setup = Join-Path $src "dist\Create-Panel-Setup.exe"; Copy-Item $setup (Join-Path ([Environment]::GetFolderPath("Desktop")) "Create-Panel-Setup.exe") -Force
-    Write-Host "Made Create-Panel-Setup.exe (also on your Desktop). Opening it..."; Start-Process $setup; exit 0
+    $setup = Join-Path $src "dist\Slate-Server-Setup.exe"; Copy-Item $setup (Join-Path ([Environment]::GetFolderPath("Desktop")) "Slate-Server-Setup.exe") -Force
+    Write-Host "Made Slate-Server-Setup.exe (also on your Desktop). Opening it..."; Start-Process $setup; exit 0
   }
-  $dest = Join-Path $env:LOCALAPPDATA "Programs\Create Panel"; New-Item -ItemType Directory -Force $dest | Out-Null
+  $dest = Join-Path $env:LOCALAPPDATA "Programs\Slate Server"; New-Item -ItemType Directory -Force $dest | Out-Null
   Copy-Item (Join-Path $env:CARGO_TARGET_DIR "$mode\create-panel.exe") $dest -Force
   Copy-Item (Join-Path $env:CARGO_TARGET_DIR "$mode\create-panel-app.exe") $dest -Force
   Copy-Item (Join-Path $src "gui\assets\icon.ico") $dest -Force
-  $lnk = Join-Path ([Environment]::GetFolderPath("Programs")) "Create Panel.lnk"
+  $lnk = Join-Path ([Environment]::GetFolderPath("Programs")) "Slate Server.lnk"
   $sh = New-Object -ComObject WScript.Shell; $s = $sh.CreateShortcut($lnk)
   $s.TargetPath = Join-Path $dest "create-panel-app.exe"; $s.WorkingDirectory = $dest; $s.IconLocation = Join-Path $dest "icon.ico"; $s.Save()
   Write-Host "Updated. Opening it..."

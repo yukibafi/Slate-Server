@@ -43,7 +43,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-const INFO_PAGE: &str = "<!doctype html><meta charset=utf-8><title>Create Panel</title><body style=\"font:16px system-ui;background:#16181c;color:#dfe3ea;padding:40px\"><h2>Create Panel host is running</h2><p>This is the engine behind the Create Panel app. Open the app on your Mac or Windows PC and connect to this address.</p>";
+const INFO_PAGE: &str = "<!doctype html><meta charset=utf-8><title>Slate Server</title><body style=\"font:16px system-ui;background:#16181c;color:#dfe3ea;padding:40px\"><h2>Slate Server host is running</h2><p>This is the engine behind the Slate Server app. Open the app on your Mac or Windows PC and connect to this address.</p>";
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Role { Hub, Server }
@@ -212,7 +212,8 @@ fn status(app: &Arc<App>, since: usize) -> J {
         ("login_item", J::Bool(false)), ("version", s(update::VERSION)), ("addons", J::Arr(vec![s("rust-phase-1")])),
         ("boot", s(&app.boot)), ("background", J::Bool(false)), ("env", envinfo::env_cached(&app.dir).2.map(|e| s(&e)).unwrap_or(J::Null)), ("updates", n(0)), ("upd_sig", s("")), ("upd_names", J::Arr(vec![])),
         ("name", s("")), ("hub_port", n(app.port as i64)), ("role", s("server")), ("admin", J::Bool(true)), ("admin_default", J::Bool(false)),
-    ])
+        ("max_players", n(get("max-players").and_then(|v| v.parse().ok()).unwrap_or(20))),
+    ].into_iter().chain(auto::live_stats()).collect::<Vec<_>>())
 }
 
 fn hub_route(app: &Arc<App>, method: &str, path: &str, req: &Req) -> Resp {

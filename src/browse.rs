@@ -418,6 +418,45 @@ fn cf_files_ok(f: &J, mc: &Option<String>, loader: &Option<String>) -> bool {
     let gvs = sa(f, "gameVersions");
     mc.as_ref().map(|m| gvs.contains(m)).unwrap_or(true) && loader.as_ref().map(|l| cf_loader_tag(l).map(|t| gvs.iter().any(|g| g == t)).unwrap_or(false) || (l == "quilt" && gvs.iter().any(|g| g == "Fabric"))).unwrap_or(true)
 }
+/// Markdown / HTML -> short readable plain text (std only).
+fn plain(t: &str, max: usize) -> String {
+    let mut out = String::new(); let mut in_tag = false; let mut last_blank = false;
+    let t = t.replace("\r", "");
+    for raw in t.lines() {
+        let mut line = String::new(); in_tag = in_tag && !raw.contains('>');
+        if in_tag { continue; }
+        for ch in raw.chars() { match ch { '<' => in_tag = true, '>' if in_tag => in_tag = false, _ if in_tag => {} _ => line.push(ch) } }
+        // images and links: ![alt](url) -> "", [text](url) -> text
+        let mut clean = String::new(); let cs: Vec<char> = line.chars().collect(); let mut i = 0;
+        while i < cs.len() {
+            if cs[i] == '!' && cs.get(i + 1) == Some(&'[') { if let Some(c) = cs[i..].iter().position(|&c| c == ']') { if cs.get(i + c + 1) == Some(&'(') { if let Some(e) = cs[i + c..].iter().position(|&c| c == ')') { i += c + e + 1; continue; } } } }
+            if cs[i] == '[' { if let Some(c) = cs[i..].iter().position(|&c| c == ']') { if cs.get(i + c + 1) == Some(&'(') { if let Some(e) = cs[i + c..].iter().position(|&c| c == ')') { clean.extend(cs[i + 1..i + c].iter()); i += c + e + 1; continue; } } } }
+            clean.push(cs[i]); i += 1;
+        }
+        let l = clean.trim().trim_start_matches('#').trim().replace("**", "").replace("__", "").replace('`', "").replace("&nbsp;", " ").replace("&amp;", "&").replace("&quot;", "\"");
+        let l = if l.starts_with("- ") || l.starts_with("* ") { format!("\u{2022} {}", &l[2..]) } else { l };
+        if l.is_empty() || l.chars().all(|c| matches!(c, '-' | '=' | '_' | '*' | '|' | ' ')) { if !last_blank && !out.is_empty() { out.push('\n'); last_blank = true; } continue; }
+        last_blank = false; out.push_str(&l); out.push('\n');
+        if out.chars().count() > max { break; }
+    }
+    let o = out.trim().to_string();
+    if o.chars().count() > max { let cut: String = o.chars().take(max).collect(); format!("{}...", cut.trim_end()) } else { o }
+}
+
+fn browse_detail(req: &Req) -> Result<J, String> {
+    let source = { let t = arg(req, "source"); if t.is_empty() { "modrinth".into() } else { t } };
+    let id = arg(req, "id"); if id.is_empty() { return Err("Missing mod id.".into()); }
+    if source == "curseforge" {
+        let m = cf_json("GET", &format!("/mods/{}", enc(&id)), None)?; let d = m.get("data").cloned().unwrap_or(J::Null);
+        let html = cf_json("GET", &format!("/mods/{}/description", enc(&id)), None).ok().map(|j| sv(&j, "data")).unwrap_or_default();
+        let mut gv: Vec<String> = av(&d, "latestFilesIndexes").iter().map(|x| sv(x, "gameVersion")).filter(|x| !x.is_empty()).collect(); gv.sort(); gv.dedup(); gv.reverse();
+        return Ok(obj(vec![("name", s(&sv(&d, "name"))), ("summary", s(&sv(&d, "summary"))), ("body", s(&plain(&html, 2200))), ("categories", J::Arr(av(&d, "categories").iter().map(|c| s(&sv(c, "name"))).collect())), ("loaders", J::Arr(vec![])), ("mc", J::Arr(gv.iter().take(10).map(|x| s(x)).collect())), ("client", J::Null), ("server", J::Null), ("downloads", d.get("downloadCount").cloned().unwrap_or(J::Null)), ("updated", d.get("dateModified").cloned().unwrap_or(J::Null)), ("url", s(&d.get("links").map(|l| sv(l, "websiteUrl")).unwrap_or_default()))]));
+    }
+    let p = mr("GET", &format!("/project/{}", enc(&id)), None)?;
+    let mut gv = sa(&p, "game_versions"); gv.reverse();
+    Ok(obj(vec![("name", s(&sv(&p, "title"))), ("summary", s(&sv(&p, "description"))), ("body", s(&plain(&sv(&p, "body"), 2200))), ("categories", J::Arr(sa(&p, "categories").iter().filter(|c| !LOADER_NAMES.contains(&c.as_str())).map(|x| s(x)).collect())), ("loaders", J::Arr(sa(&p, "loaders").iter().filter(|x| LOADER_NAMES.contains(&x.as_str())).map(|x| s(x)).collect())), ("mc", J::Arr(gv.iter().take(10).map(|x| s(x)).collect())), ("client", p.get("client_side").cloned().unwrap_or(J::Null)), ("server", p.get("server_side").cloned().unwrap_or(J::Null)), ("downloads", p.get("downloads").cloned().unwrap_or(J::Null)), ("updated", p.get("updated").cloned().unwrap_or(J::Null)), ("url", s(&format!("https://modrinth.com/mod/{}", so(&p, "slug").unwrap_or(id.clone()))))]))
+}
+
 fn browse_versions(app: &App, req: &Req) -> Result<J, String> {
     let source = { let t = arg(req, "source"); if t.is_empty() { "modrinth".into() } else { t } };
     let pid = arg(req, "id"); if pid.is_empty() { return Err("Missing mod id.".into()); }
@@ -664,6 +703,7 @@ pub fn handle(app: &Arc<App>, req: &Req) -> Option<Resp> {
             }
         }
         ("GET", "/api/browse/search") => match browse_search(app, req) { Ok(j) => Resp::json(200, j.to_string()), Err(e) => fail(e) },
+        ("GET", "/api/browse/detail") => match browse_detail(req) { Ok(j) => Resp::json(200, j.to_string()), Err(e) => fail(e) },
         ("GET", "/api/browse/versions") => match browse_versions(app, req) { Ok(j) => Resp::json(200, j.to_string()), Err(e) => fail(e) },
         ("GET", "/api/browse/categories") => {
             let cats = if req.q("source") == Some("curseforge") { match cf_categories() { Ok(c) => c, Err(e) => return Some(fail(e)) } } else { MR_CATS.iter().map(|c| { let t: String = c.split('-').map(|w| { let mut ch = w.chars(); ch.next().map(|f| f.to_uppercase().collect::<String>() + ch.as_str()).unwrap_or_default() }).collect::<Vec<_>>().join(" "); obj(vec![("id", s(c)), ("name", s(&t))]) }).collect() };
@@ -695,4 +735,20 @@ pub fn handle(app: &Arc<App>, req: &Req) -> Option<Resp> {
 pub fn start(app: &Arc<App>) {
     let a = app.clone();
     thread::spawn(move || { thread::sleep(Duration::from_secs(10)); loop { auto_loop_tick(&a); if crate::modupd::wait_event(1800) { thread::sleep(Duration::from_secs(4)); } } });
+}
+
+#[cfg(test)]
+mod plain_tests {
+    use super::plain;
+    #[test]
+    fn strips_markdown_and_html() {
+        let t = "# Title\n\n![img](http://x/y.png)\nSome **bold** [link](http://a.b) text.\n<p>Hello <b>world</b></p>\n- one\n- two\n\n\n\nEnd";
+        let o = plain(t, 500);
+        assert!(!o.contains("http"), "{o}");
+        assert!(o.contains("Some bold link text."), "{o}");
+        assert!(o.contains("Hello world"), "{o}");
+        assert!(o.contains("\u{2022} one"), "{o}");
+        assert!(!o.contains("\n\n\n"), "{o}");
+        assert!(plain(&"word ".repeat(1000), 100).ends_with("..."));
+    }
 }

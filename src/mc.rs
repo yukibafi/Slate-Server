@@ -240,6 +240,7 @@ impl Mc {
 }
 
 fn push_line(g: &mut Inner, l: String) {
+    if crate::auto::tps_capture(&l) { return; }
     g.lines.push_back(l);
     g.total += 1;
     while g.lines.len() > MAX_LINES { g.lines.pop_front(); }

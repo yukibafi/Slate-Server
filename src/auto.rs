@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const KINDS: &[&str] = &["restart", "backup", "command", "broadcast", "stop", "start"];
 const WELCOME: &str = "Welcome to {server}, {player}!";
@@ -329,6 +330,7 @@ fn hist_save(app: &App) {
     let _ = fs::write(&tmp, obj(vec![("points", pts)]).to_string()).and_then(|_| fs::rename(&tmp, &f));
 }
 pub fn history_start(app: &Arc<App>) {
+    tps_start(app);
     let a = app.clone();
     thread::spawn(move || {
         hist_load(&a); thread::sleep(Duration::from_secs(10));
@@ -372,5 +374,98 @@ pub fn history_route(req: &Req) -> Option<Resp> {
             Some(Resp::json(200, obj(vec![("ok", J::Bool(true)), ("points", J::Arr(out)), ("step", n(step)), ("range", n(rng)), ("now", n(sys::now() as i64))]).to_string()))
         }
         _ => None,
+    }
+}
+
+// ---- TPS sampler, world size and free disk (shown on the Overview tiles)
+static TPS_ARMED: AtomicBool = AtomicBool::new(false);
+static TPS_FOUND: Mutex<Option<f64>> = Mutex::new(None);
+static TPS_HIST: Mutex<Vec<f64>> = Mutex::new(Vec::new());
+static WORLD: Mutex<(i64, i64)> = Mutex::new((-1, -1)); // (world MB, free disk MB)
+
+/// Called for every server log line. While a TPS probe is in flight, the probe's own output is
+/// swallowed (so it never clutters the console) and the number is remembered.
+pub fn tps_capture(line: &str) -> bool {
+    if !TPS_ARMED.load(Ordering::SeqCst) { return false; }
+    let num = |t: &str| -> Option<f64> { let e = t.find(|c: char| !(c.is_ascii_digit() || c == '.')).unwrap_or(t.len()); t[..e].parse().ok() };
+    if let Some(i) = line.find("Mean TPS: ") {
+        if let Some(v) = num(&line[i + 10..]) { let mut f = TPS_FOUND.lock().unwrap(); if f.is_none() || line.contains("Overall") { *f = Some(v.min(20.0)); } }
+        return true;
+    }
+    if let Some(i) = line.find("Average time per tick: ") {
+        if let Some(ms) = num(&line[i + 23..]) { if ms > 0.0 { *TPS_FOUND.lock().unwrap() = Some((1000.0 / ms).min(20.0)); } }
+        return true;
+    }
+    line.contains("Mean tick time:") || line.contains("Target tick rate") || line.contains("Percentiles") || line.contains("The game is running normally") || line.contains("Unknown or incomplete command") || line.contains("<--[HERE]")
+}
+fn dir_mb(p: &std::path::Path, depth: u32) -> u64 {
+    if depth > 12 { return 0; }
+    let mut t = 0u64;
+    if let Ok(rd) = fs::read_dir(p) { for e in rd.flatten() { if let Ok(m) = e.metadata() { if m.is_dir() { t += dir_mb(&e.path(), depth + 1); } else { t += m.len(); } } } }
+    t
+}
+fn free_mb(dir: &std::path::Path) -> i64 {
+    #[cfg(unix)]
+    { if let Ok(o) = std::process::Command::new("df").arg("-Pk").arg(dir).output() { let t = String::from_utf8_lossy(&o.stdout).to_string(); if let Some(l) = t.lines().nth(1) { if let Some(k) = l.split_whitespace().nth(3).and_then(|x| x.parse::<i64>().ok()) { return k / 1024; } } } }
+    let _ = dir; -1
+}
+pub fn tps_start(app: &Arc<App>) {
+    let a = app.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_secs(20));
+        let mut misses = 0u32; let mut was_online = false; let mut tick = 0u32;
+        loop {
+            // world size + free disk, every ~3 minutes
+            if tick % 3 == 0 {
+                let ln = crate::config::read_props(&a.dir).into_iter().find(|(k, _)| k == "level-name").map(|x| x.1).filter(|v| !v.is_empty()).unwrap_or_else(|| "world".into());
+                let mb = (dir_mb(&a.dir.join(&ln), 0) / 1_048_576) as i64;
+                *WORLD.lock().unwrap() = (mb, free_mb(&a.dir));
+            }
+            tick += 1;
+            let sn = a.mc.snapshot(0);
+            let online = sn.state == "online";
+            if online && !was_online { misses = 0; }
+            was_online = online;
+            if online && misses < 3 {
+                let loader = crate::envinfo::env_cached(&a.dir).0.unwrap_or_default().to_lowercase();
+                let cmd = if loader.contains("neoforge") { "neoforge tps" } else if loader.contains("forge") { "forge tps" } else { "tick query" };
+                *TPS_FOUND.lock().unwrap() = None; TPS_ARMED.store(true, Ordering::SeqCst);
+                a.mc.send(cmd);
+                thread::sleep(Duration::from_secs(3));
+                TPS_ARMED.store(false, Ordering::SeqCst);
+                match TPS_FOUND.lock().unwrap().take() {
+                    Some(v) => { misses = 0; let mut h = TPS_HIST.lock().unwrap(); h.push(v); let l = h.len(); if l > 40 { h.drain(..l - 40); } }
+                    None => misses += 1,
+                }
+            }
+            thread::sleep(Duration::from_secs(60));
+        }
+    });
+}
+pub fn live_stats() -> Vec<(&'static str, J)> {
+    let h = TPS_HIST.lock().unwrap().clone();
+    let (w, f) = *WORLD.lock().unwrap();
+    vec![
+        ("tps", h.last().map(|v| J::Num(((*v) * 10.0).round() / 10.0)).unwrap_or(J::Null)),
+        ("tps_hist", J::Arr(h.iter().map(|v| J::Num((*v * 10.0).round() / 10.0)).collect())),
+        ("world_mb", if w >= 0 { n(w) } else { J::Null }), ("disk_free_mb", if f >= 0 { n(f) } else { J::Null }),
+    ]
+}
+
+#[cfg(test)]
+mod tps_tests {
+    use super::*;
+    #[test]
+    fn captures_and_swallows_probe_output() {
+        assert!(!tps_capture("[12:00:00] [Server thread/INFO]: Mean TPS: 12.0")); // not armed: shown normally
+        TPS_ARMED.store(true, Ordering::SeqCst); *TPS_FOUND.lock().unwrap() = None;
+        assert!(tps_capture("[Server thread/INFO]: Dim minecraft:overworld: Mean tick time: 3.1 ms. Mean TPS: 20.000"));
+        assert!(tps_capture("[Server thread/INFO]: Overall: Mean tick time: 60.0 ms. Mean TPS: 16.667"));
+        assert_eq!(TPS_FOUND.lock().unwrap().map(|v| (v * 10.0).round() / 10.0), Some(16.7));
+        *TPS_FOUND.lock().unwrap() = None;
+        assert!(tps_capture("[Server thread/INFO]: Average time per tick: 100.0ms (Target: 50.0ms)"));
+        assert_eq!(*TPS_FOUND.lock().unwrap(), Some(10.0));
+        assert!(!tps_capture("[Server thread/INFO]: Alex joined the game"));
+        TPS_ARMED.store(false, Ordering::SeqCst);
     }
 }

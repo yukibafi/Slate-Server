@@ -1,8 +1,8 @@
 [package]
 name = "create-panel-app"
-version = "0.2.10"
+version = "0.2.12"
 edition = "2021"
-description = "Create Panel desktop app (Slint). Talks to the engine in ../ (the create-panel binary)."
+description = "Slate Server desktop app (Slint). Talks to the engine in ../ (the create-panel binary)."
 
 [[bin]]
 name = "create-panel-app"
@@ -14,6 +14,9 @@ create-panel = { path = ".." }
 
 [build-dependencies]
 slint-build = "1.8"
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
 
 [profile.release]
 opt-level = 3

@@ -142,7 +142,7 @@ fn sw_resolve(kind: &str, mc: &str) -> Result<Res, String> {
 pub fn write_type_marker(dir: &Path, kind: &str, mc: &str, build: &str) { let _ = fs::write(dir.join(".server-type.json"), obj(vec![("type", s(kind)), ("mc", s(mc)), ("build", s(build))]).to_string()); }
 
 pub fn write_start_script(dir: &Path, java: &str, args: &str) -> Result<(), String> {
-    let body = format!("#!/bin/bash\n# Written by Create Panel. Starts this Minecraft server. Memory is set in user_jvm_args.txt.\ncd \"$(dirname \"$0\")\"\nJAVA={}\n[ -x \"$JAVA\" ] || JAVA=java\nexec \"$JAVA\" @user_jvm_args.txt {args} nogui \"$@\"\n", J::Str(java.to_string()).to_string());
+    let body = format!("#!/bin/bash\n# Written by Slate Server. Starts this Minecraft server. Memory is set in user_jvm_args.txt.\ncd \"$(dirname \"$0\")\"\nJAVA={}\n[ -x \"$JAVA\" ] || JAVA=java\nexec \"$JAVA\" @user_jvm_args.txt {args} nogui \"$@\"\n", J::Str(java.to_string()).to_string());
     let p = dir.join("start.sh");
     fs::write(&p, body).map_err(|e| e.to_string())?;
     #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; let _ = fs::set_permissions(&p, fs::Permissions::from_mode(0o755)); }

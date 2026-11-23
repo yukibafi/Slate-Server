@@ -1,8 +1,8 @@
 ; Inno Setup script for the Windows installer. Built by .github/workflows/build.yml (or run: iscc installer\create-panel.iss
 ; after `cargo build --release` in both the root and gui/). Installs for the current user only, no admin prompt.
-#define AppName "Create Panel"
+#define AppName "Slate Server"
 #ifndef AppVersion
-  #define AppVersion "0.2.10"
+  #define AppVersion "0.2.12"
 #endif
 #ifndef BinDir
   #define BinDir "..\target\release"
@@ -15,13 +15,13 @@
 AppId={{6F1D2C4B-5A7E-4C1B-9E3A-C2EA7E0A9D11}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppPublisher=Create Panel
+AppPublisher=Slate Server
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\dist
-OutputBaseFilename=Create-Panel-Setup
+OutputBaseFilename=Slate-Server-Setup
 SetupIconFile=..\gui\assets\icon.ico
 UninstallDisplayIcon={app}\create-panel-app.exe
 Compression=lzma2

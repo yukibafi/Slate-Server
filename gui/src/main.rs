@@ -217,9 +217,14 @@ fn poll_loop(ui: Weak<App>, st: Shared) {
             let pl = names.len();
             let ar = j.get("settings").map(|x| matches!(x.get("auto_restart"), Some(J::Bool(true)))).unwrap_or(false);
             let ip = gs(&j, "ip"); let port_s = gs(&j, "port");
-            let mem = if gn(&j, "mem_mb") > 0 { format!("{:.1} / {:.1} GB", gn(&j, "mem_mb") as f64 / 1024.0, gn(&j, "max_mb") as f64 / 1024.0) } else { "-".into() };
+            let mem = if gn(&j, "mem_mb") > 0 { format!("{:.1} of {:.0} GB", gn(&j, "mem_mb") as f64 / 1024.0, gn(&j, "max_mb") as f64 / 1024.0) } else { "-".into() };
             let frac = if gn(&j, "max_mb") > 0 { (gn(&j, "mem_mb") as f32 / gn(&j, "max_mb") as f32).clamp(0.0, 1.0) } else { 0.0 };
             let up = gn(&j, "uptime"); let uptime = if state == "online" && up > 0 { format!("{}h {}m", up / 3600, (up % 3600) / 60) } else { "-".into() };
+            let maxp = { let v = gn(&j, "max_players"); if v > 0 { v } else { 20 } } as i32;
+            let (tps_s, tps_lbl, tps_lvl) = match j.get("tps") { Some(J::Num(v)) => (format!("{:.1}", v), if *v >= 19.5 { "Smooth" } else if *v >= 17.0 { "Slightly slow" } else if *v >= 12.0 { "Laggy" } else { "Struggling" }.to_string(), if *v >= 19.0 { 0 } else if *v >= 15.0 { 1 } else { 2 }), _ => ("-".into(), if state == "online" { "Measuring..." } else { "Server is offline" }.to_string(), 3) };
+            let tps_path = { let h: Vec<f64> = arr(&j, "tps_hist").iter().filter_map(|x| if let J::Num(v) = x { Some(*v) } else { None }).collect(); if h.len() < 2 { String::new() } else { let mut p = String::new(); for (i, v) in h.iter().enumerate() { p.push_str(&format!("{} {:.1} {:.1} ", if i == 0 { "M" } else { "L" }, i as f64 / (h.len() - 1) as f64 * 1000.0, 100.0 - (v / 20.0).clamp(0.0, 1.0) * 100.0)); } p } };
+            let world = { let w = gn(&j, "world_mb"); if w <= 0 { "-".to_string() } else if w >= 1024 { format!("{:.1} GB", w as f64 / 1024.0) } else { format!("{w} MB") } };
+            let free = { let f = gn(&j, "disk_free_mb"); if f <= 0 { String::new() } else if f >= 1024 { format!("{:.0} GB", f as f64 / 1024.0) } else { format!("{f} MB") } };
             people::prefetch(&ui, &st, names.clone());
             let (errs, fp_hint) = { let mut g = st.lock().unwrap(); let on = g.sel.tab == "console"; if g.x.con_seen > lines.len() || on { g.x.con_seen = lines.len(); }
                 (lines[g.x.con_seen..].iter().filter(|l| extra::kind_of(l) == 3).count() as i32, changed && lines.iter().rev().take(20).any(|l| l.to_lowercase().contains("fingerprint"))) };
@@ -232,6 +237,7 @@ fn poll_loop(ui: Weak<App>, st: Shared) {
                 a.set_ov_ip(SharedString::from(ip)); a.set_ov_port(SharedString::from(port_s)); a.set_ov_mem(SharedString::from(mem)); a.set_ov_uptime(SharedString::from(uptime));
                 a.set_online(ModelRc::new(VecModel::from(names.iter().map(|n| people::row(n)).collect::<Vec<_>>())));
                 a.set_ov_mem_frac(frac);
+                a.set_ov_maxp(maxp); a.set_ov_tps(SharedString::from(tps_s)); a.set_ov_tps_label(SharedString::from(tps_lbl)); a.set_ov_tps_lvl(tps_lvl); a.set_ov_tps_path(SharedString::from(tps_path)); a.set_ov_world(SharedString::from(world)); a.set_ov_free(SharedString::from(free));
                 if changed { extra::set_console(a, &lines); extra::set_activity(a, &lines); }
             });
         }
@@ -324,21 +330,35 @@ fn load_settings(ui: &Weak<App>, st: &Shared) {
 }
 fn render_fields(a: &App, st: &Shared) {
     let q = a.get_settings_search().to_string().trim().to_lowercase();
-    let g = st.lock().unwrap();
+    let mut g = st.lock().unwrap();
+    // one category open at a time (the left list picks it); a search shows every match
+    if !g.fdata.iter().any(|x| g.open.contains(&x.0)) { if let Some(f) = g.fdata.first() { let n = f.0.clone(); g.open.clear(); g.open.insert(n); } }
+    let cur = g.fdata.iter().find(|x| g.open.contains(&x.0)).map(|x| x.0.clone()).unwrap_or_default();
     let mut out: Vec<Field> = vec![];
+    let mut nav: Vec<Field> = vec![];
     for (name, fs_) in &g.fdata {
+        nav.push(Field { key: SharedString::new(), label: name.as_str().into(), help: SharedString::new(), kind: 9, value: SharedString::new(), options: ModelRc::default(), count: fs_.len() as i32, open: *name == cur });
         let shown: Vec<&FD> = fs_.iter().filter(|f| q.is_empty() || f.key.to_lowercase().contains(&q) || f.label.to_lowercase().contains(&q) || f.help.to_lowercase().contains(&q)).collect();
         if shown.is_empty() { continue; }
-        let open = !q.is_empty() || g.open.contains(name);
-        out.push(Field { key: SharedString::new(), label: name.as_str().into(), help: SharedString::new(), kind: 9, value: SharedString::new(), options: ModelRc::default(), count: shown.len() as i32, open });
-        if open { for f in shown {
+        let open = !q.is_empty() || *name == cur;
+        if !open { continue; }
+        if !q.is_empty() { out.push(Field { key: SharedString::new(), label: name.as_str().into(), help: SharedString::new(), kind: 10, value: SharedString::new(), options: ModelRc::default(), count: shown.len() as i32, open: true }); }
+        for f in shown {
             let v = g.edits.get(&f.key).cloned().unwrap_or_else(|| f.value.clone());
             out.push(Field { key: f.key.as_str().into(), label: f.label.as_str().into(), help: f.help.as_str().into(), kind: f.kind, value: v.into(), options: ModelRc::new(VecModel::from(f.options.iter().map(|o| SharedString::from(o.as_str())).collect::<Vec<_>>())), count: 0, open: false });
-        } }
+        }
     }
+    let title = if q.is_empty() { cur.clone() } else { "Search results".to_string() };
+    let count = g.fdata.iter().find(|x| x.0 == cur).map(|x| x.1.len()).unwrap_or(0);
     drop(g);
+    a.set_group_title(SharedString::from(title));
+    a.set_group_count(count as i32);
+    a.set_groups(ModelRc::new(VecModel::from(nav)));
+    a.set_fields_h(rows_h(&out));
     a.set_fields(ModelRc::new(VecModel::from(out)));
 }
+/// Total height of a FieldList (row heights depend on the row kind).
+pub fn rows_h(v: &[Field]) -> f32 { v.iter().map(|f| match f.kind { 9 | 6 => 58.0, 10 => 62.0, _ => 68.0 }).sum::<f32>() + 8.0 }
 fn load_overview(ui: &Weak<App>, st: &Shared) { load_mods(ui, st); load_backups(ui, st); }
 
 fn wire(app: &App, st: Shared) {
@@ -517,8 +537,8 @@ fn wire(app: &App, st: Shared) {
         { let mut g = s_.lock().unwrap(); let orig = g.fdata.iter().flat_map(|x| x.1.iter()).find(|f| f.key == k.as_str()).map(|f| f.value.clone()); if orig.as_deref() == Some(v.as_str()) { g.edits.remove(k.as_str()); } else { g.edits.insert(k.to_string(), v.to_string()); } let dirty = !g.edits.is_empty(); drop(g); if let Some(a) = u.upgrade() { a.set_settings_dirty(dirty); } }
     }); }
     { let (u, s_) = (ui.clone(), st.clone()); app.on_group_toggle(move |name| {
-        { let mut g = s_.lock().unwrap(); if !g.open.remove(name.as_str()) { g.open.insert(name.to_string()); } }
-        if let Some(a) = u.upgrade() { render_fields(&a, &s_); }
+        { let mut g = s_.lock().unwrap(); g.open.clear(); g.open.insert(name.to_string()); }
+        if let Some(a) = u.upgrade() { a.set_settings_search(SharedString::new()); render_fields(&a, &s_); }
     }); }
     { let (u, s_) = (ui.clone(), st.clone()); app.on_settings_refilter(move || { if let Some(a) = u.upgrade() { render_fields(&a, &s_); } }); }
     { let (u, s_) = (ui.clone(), st.clone()); app.on_settings_discard(move || { s_.lock().unwrap().edits.clear(); if let Some(a) = u.upgrade() { a.set_settings_dirty(false); render_fields(&a, &s_); } }); }

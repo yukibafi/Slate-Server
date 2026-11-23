@@ -8,7 +8,7 @@ static BLOB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/gui_blob.bin"));
 
 fn gui_path() -> Option<PathBuf> {
     let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    ["Create Panel", "create-panel-app.exe", "create-panel-app"].iter().map(|n| dir.join(n)).find(|p| p.is_file())
+    ["Slate Server", "Create Panel", "create-panel-app.exe", "create-panel-app"].iter().map(|n| dir.join(n)).find(|p| p.is_file())
 }
 
 fn app_bundle(p: &Path) -> Option<PathBuf> { p.ancestors().find(|a| a.extension().map(|e| e == "app").unwrap_or(false)).map(|a| a.to_path_buf()) }

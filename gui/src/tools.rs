@@ -92,7 +92,7 @@ pub fn load(ui: &Weak<App>, st: &Shared) {
     let (path, cmp) = { let g = st.lock().unwrap(); (g.x.tools_path.clone(), g.x.cmp.clone()) };
     let rows = build(&c, &id, &path, &cmp);
     load_mem(ui, &c, &id);
-    with_ui(ui, move |a| { a.set_tools(ModelRc::new(VecModel::from(rows.into_iter().map(to_field).collect::<Vec<_>>()))); });
+    with_ui(ui, move |a| { let fl: Vec<crate::Field> = rows.into_iter().map(to_field).collect(); a.set_tools_h(crate::rows_h(&fl)); a.set_tools(ModelRc::new(VecModel::from(fl))); });
 }
 
 fn load_mem(ui: &Weak<App>, c: &Client, id: &str) {

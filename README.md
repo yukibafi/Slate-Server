@@ -1,14 +1,14 @@
-# Create Panel (Rust)
+# Slate Server (Rust)
 
 # Start here (install in one click)
 - **Mac:** unzip, double-click `Install.command` (right-click > Open the first time). It builds the app, puts it in Applications, and can make a `.dmg`.
-- **Windows:** unzip, double-click `Install.bat`. It builds the app and runs the `Create-Panel-Setup.exe` installer.
+- **Windows:** unzip, double-click `Install.bat`. It builds the app and runs the `Slate-Server-Setup.exe` installer.
 - Both need internet the first time (Rust toolchain; the scripts fetch it).
 
 ## Prebuilt .exe / .dmg via GitHub (no local build)
 1. Create a new GitHub repo and push the contents of this zip to it.
 2. Open the repo's **Actions** tab, run **Build apps** (or push a tag like `v0.1.0`).
-3. Download `Create-Panel-Setup.exe` (Windows) and the `.dmg` (Mac) from the run's Artifacts, or from Releases if you pushed a tag.
+3. Download `Slate-Server-Setup.exe` (Windows) and the `.dmg` (Mac) from the run's Artifacts, or from Releases if you pushed a tag.
 
 
 One binary. No dependencies (std only). Runs as:
@@ -61,6 +61,12 @@ Each build run on GitHub also produces an **update file** (`create-panel-update-
 - **Players:** Announce box sends a chat message to everyone online. **Hub:** search box appears once you have more than three servers; the address for Windows also shows a name that doesn't change when the IP does.
 - **New look (0.2.4):** left sidebar on the hub and inside each server, banner server cards with the join address and a Copy button, status pills, metric tiles on Overview (players, memory, uptime, last backup), and one header with Start / Restart / Stop / Back up now. Pick any colour under Settings and everything follows it.
 - **One-click updates (0.2.5):** Settings > Updates > **Check now / Update now**. The app looks at the newest GitHub Release of yukibafi/Slate-Server, downloads the file for your computer and installs it (engine and app on the Mac that hosts, app only on Windows, which replaces itself and reopens). A small banner on the hub also appears when something newer is out. For a private repo, paste a GitHub token in the box that shows up. Builds (installer + update files + a GitHub Release) now run automatically on every push; re-paste `.github/workflows/build.yml` once because the website upload skips hidden folders. Older builds without this still need one manual "Update from a file..." / reinstall first.
+- **0.2.12:** renamed to **Slate Server** with a new icon (also set as the window icon, so it shows in the Windows taskbar). Overview tiles now match the concept: Players with a graph and "of 20", Memory, **Ticks per second** with a graph (the panel asks the server for its TPS once a minute and hides the reply from the console), and **World size** with free disk. Who's on and Quick actions also sit beside the console on the Console tab when the window is wide. Backups, Datapacks and the add-server / import screens use the new style and sidebar.
+- **0.2.11:**
+  - Mod browser: live search (results update as you type), bigger cards with a short description, a Details page that shows what the mod does, Uninstall right on any installed mod, tick-boxes for installing or removing several mods at once.
+  - Console lines are split into time / level / message columns, with warnings and errors highlighted.
+  - Settings is now a category list on the left (server properties, Look, Automation & updates, Manage server) with one "Unsaved changes" bar. The empty Options tab is gone; its rename / crash restart / force stop / remove controls are under Manage server.
+  - Players tab has two views (Players / Lists & add) and scrolls properly; Settings and Tools pages scroll as one page.
 - **Players tab (0.2.9):** counts for online / whitelisted / operators / banned, a table of everyone who has played (playtime, joins, last seen, Op / Whitelisted / Banned tags) with Op, Whitelist, Kick and Ban buttons on each row, and Remove / Pardon buttons on the whitelist, operator and ban lists. Overview still shows the quick player stats.
 - **Menus match the concept (0.2.8):** Overview now has the live console with filter chips and a command box, Who's on with Announce, and Quick actions beside it; Files, Players, Backups, Tools, Settings and Options use the same headers and spacing, and wide toolbars split into rows so nothing is cut off.
 - **Stuck panel port fixed (0.2.7):** if another program is using a server panel's internal port, the hub now moves that panel to a free port by itself instead of staying on "connecting"/"couldn't connect".
@@ -76,9 +82,9 @@ Slint app that shows the engine's state. Build both crates:
 Keep `create-panel` next to the app (the Mac .app puts both in Contents/MacOS). Use the GitHub Action in `.github/workflows/build.yml` to get ready-made Mac (Apple Silicon + Intel) and Windows zips.
 
 ## Updating
-Drop the new `create-panel-source.zip` into Downloads and double-click `update.command` (or run `./update.command /path/to/zip`). It unpacks, builds, replaces `~/Applications/Create Panel.app` and reopens it. On Windows, double-click `update.bat` (it runs `update.ps1`: builds from the newest zip in Downloads, installs to `%LOCALAPPDATA%\Programs\Create Panel`, adds a Start Menu shortcut, opens it; needs Rust + the C++ build tools once). For a normal installer, the GitHub workflow also produces `Create-Panel-Setup.exe` from `installer/create-panel.iss` (Inno Setup, per-user install, no admin prompt).
+Drop the new `create-panel-source.zip` into Downloads and double-click `update.command` (or run `./update.command /path/to/zip`). It unpacks, builds, replaces `~/Applications/Slate Server.app` and reopens it. On Windows, double-click `update.bat` (it runs `update.ps1`: builds from the newest zip in Downloads, installs to `%LOCALAPPDATA%\Programs\Slate Server`, adds a Start Menu shortcut, opens it; needs Rust + the C++ build tools once). For a normal installer, the GitHub workflow also produces `Slate-Server-Setup.exe` from `installer/create-panel.iss` (Inno Setup, per-user install, no admin prompt).
 
-Installers: `update.ps1 -Installer` (Windows) builds and runs a real `Create-Panel-Setup.exe`; `./update.command --dmg` (Mac) puts a drag-to-Applications `Create-Panel.dmg` on the Desktop.
+Installers: `update.ps1 -Installer` (Windows) builds and runs a real `Slate-Server-Setup.exe`; `./update.command --dmg` (Mac) puts a drag-to-Applications `Slate-Server.dmg` on the Desktop.
 
 ## Discord bot, player stats, skins
 Hub page > **Discord bot**: install (private Python venv), paste the token, copy the invite link, start/stop, toggle /modlist, /fingerprint, /welcome, set allowed user IDs, read the log. Players page shows play time, joins and last seen per player, with head avatars (from skins) in every list.
