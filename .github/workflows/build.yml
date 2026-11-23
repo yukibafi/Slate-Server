@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: "${{ matrix.target }}" }
-      - name: Build app (window)
+      - name: Build updated Slate Server app (window)
         working-directory: gui
         run: cargo build --release --target ${{ matrix.target }}
       - name: Build engine (carries the app inside, so one update file updates both)
@@ -38,17 +38,17 @@ jobs:
       - name: Package (Mac)
         if: runner.os == 'macOS'
         run: |
-          APP="Create Panel.app"
+          APP="Slate Server.app"
           mkdir -p "dist/$APP/Contents/MacOS"
           cp target/${{ matrix.target }}/release/create-panel "dist/$APP/Contents/MacOS/create-panel"
-          cp gui/target/${{ matrix.target }}/release/create-panel-app "dist/$APP/Contents/MacOS/Create Panel"
+          cp gui/target/${{ matrix.target }}/release/create-panel-app "dist/$APP/Contents/MacOS/Slate Server"
           mkdir -p "dist/$APP/Contents/Resources" && cp gui/assets/icon.icns "dist/$APP/Contents/Resources/icon.icns"
           cat > "dist/$APP/Contents/Info.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
-            <key>CFBundleName</key><string>Create Panel</string>
-            <key>CFBundleExecutable</key><string>Create Panel</string>
+            <key>CFBundleName</key><string>Slate Server</string>
+            <key>CFBundleExecutable</key><string>Slate Server</string>
             <key>CFBundleIdentifier</key><string>com.createpanel.app</string>
             <key>CFBundleIconFile</key><string>icon</string>
             <key>CFBundlePackageType</key><string>APPL</string>
@@ -61,18 +61,18 @@ jobs:
           chmod +x "dist/$APP/Contents/MacOS/"*
           # unsigned build: ad-hoc sign so macOS lets you right-click > Open it
           codesign --force --deep --sign - "dist/$APP" || true
-          cd dist && ditto -c -k --keepParent "$APP" ../Create-Panel-${{ matrix.name }}.zip && cd ..
+          cd dist && ditto -c -k --keepParent "$APP" ../Slate-Server-${{ matrix.name }}.zip && cd ..
           mkdir -p dmgroot && cp -R "dist/$APP" dmgroot/ && ln -s /Applications dmgroot/Applications
-          hdiutil create -volname "Create Panel" -srcfolder dmgroot -ov -format UDZO "Create-Panel-${{ matrix.name }}.dmg"
+          hdiutil create -volname "Slate Server" -srcfolder dmgroot -ov -format UDZO "Slate-Server-${{ matrix.name }}.dmg"
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force dist/CreatePanel | Out-Null
-          Copy-Item target/${{ matrix.target }}/release/create-panel.exe dist/CreatePanel/
-          Copy-Item gui/target/${{ matrix.target }}/release/create-panel-app.exe dist/CreatePanel/
-          Copy-Item gui/assets/icon.ico dist/CreatePanel/
-          Compress-Archive -Path dist/CreatePanel/* -DestinationPath Create-Panel-${{ matrix.name }}.zip
+          New-Item -ItemType Directory -Force dist/SlateServer | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/create-panel.exe dist/SlateServer/
+          Copy-Item gui/target/${{ matrix.target }}/release/create-panel-app.exe dist/SlateServer/
+          Copy-Item gui/assets/icon.ico dist/SlateServer/
+          Compress-Archive -Path dist/SlateServer/* -DestinationPath Slate-Server-${{ matrix.name }}.zip
       - name: Windows installer
         if: runner.os == 'Windows'
         shell: pwsh
@@ -83,11 +83,11 @@ jobs:
           & $iscc "/DAppVersion=$ver" "/DBinDir=..\target\${{ matrix.target }}\release" "/DGuiBinDir=..\gui\target\${{ matrix.target }}\release" installer\create-panel.iss
       - uses: actions/upload-artifact@v4
         with:
-          name: Create-Panel-${{ matrix.name }}
+          name: Slate-Server-${{ matrix.name }}
           path: |
-            Create-Panel-${{ matrix.name }}.zip
-            Create-Panel-${{ matrix.name }}.dmg
-            dist/Create-Panel-Setup.exe
+            Slate-Server-${{ matrix.name }}.zip
+            Slate-Server-${{ matrix.name }}.dmg
+            dist/Slate-Server-Setup.exe
             upd/*
           if-no-files-found: ignore
   release:
@@ -105,4 +105,4 @@ jobs:
           [ -n "$(find out -type f)" ] || { echo "Nothing was built."; exit 1; }
           VER=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
           gh release delete "v$VER" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "v$VER" $(find out -type f) --title "Create Panel $VER" --notes "Open the app and press Update now." --target "$GITHUB_SHA" --latest
+          gh release create "v$VER" $(find out -type f) --title "Slate Server $VER" --notes "Open the app and press Update now." --target "$GITHUB_SHA" --latest
