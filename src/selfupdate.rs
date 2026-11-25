@@ -54,16 +54,27 @@ pub fn latest(current: &str) -> Result<Latest, String> {
     let auth = format!("Bearer {}", src.token);
     let mut h: Vec<(&str, &str)> = vec![("User-Agent", "create-panel-rs"), ("Accept", "application/vnd.github+json")];
     if !src.token.is_empty() { h.push(("Authorization", &auth)); }
-    let (code, body) = sys::http("GET", &url, &h, None, 25);
+    let (mut code, mut body) = sys::http("GET", &url, &h, None, 25);
+    let mut from_list = false;
+    if code == 404 {
+        // /latest answers 404 when the newest release is a draft/pre-release or the list is empty; look at the list itself
+        let list = format!("{}/repos/{}/releases?per_page=5", base, src.repo);
+        let (c2, b2) = sys::http("GET", &list, &h, None, 25);
+        if c2 == 200 { code = 200; body = b2; from_list = true; } else if c2 != 404 && c2 != 0 { code = c2; }
+    }
     match code {
         0 => return Err("Couldn't reach GitHub. Check the internet connection.".into()),
         200 => {}
-        404 => return Err(format!("No release found for {} yet. Either the build hasn't finished, or the repository is private (then add a GitHub token below).", src.repo)),
-        401 => return Err("GitHub didn't accept the token. Paste a new one below.".into()),
+        404 => return Err(format!("GitHub has no releases for {r}. Check the repository name in Settings, Updates (it should read {d}). If the repository is private, add a GitHub token there.", r = src.repo, d = DEFAULT_REPO)),
+        401 => return Err("GitHub didn't accept the token. Paste a new one in Settings, Updates.".into()),
         403 => return Err("GitHub is limiting requests right now. Try again in a few minutes.".into()),
         c => return Err(format!("GitHub answered {c}.")),
     }
-    let j = json::parse(&String::from_utf8_lossy(&body)).ok_or("GitHub's answer wasn't readable.")?;
+    let mut j = json::parse(&String::from_utf8_lossy(&body)).ok_or("GitHub's answer wasn't readable.")?;
+    if from_list || matches!(j, J::Arr(_)) {
+        let first = match &j { J::Arr(a) => a.iter().find(|x| !matches!(x.get("draft"), Some(J::Bool(true))) && !matches!(x.get("prerelease"), Some(J::Bool(true)))).cloned(), _ => None };
+        j = first.ok_or_else(|| format!("{} has no published release yet. The build may still be running; try again in a few minutes.", src.repo))?;
+    }
     let tag = text(&j, "tag_name");
     let version = tag.trim_start_matches('v').to_string();
     let mut assets = vec![];
@@ -105,7 +116,7 @@ pub fn check_resp() -> Resp {
     match latest(update::VERSION) {
         Ok(l) => {
             let has = pick(&l, "create-panel-update-").is_some();
-            ok(vec![("current", s(update::VERSION)), ("latest", s(&l.version)), ("newer", J::Bool(l.newer && has)), ("notes", s(&l.notes)), ("file_missing", J::Bool(l.newer && !has)), ("repo", s(&source().repo))])
+            ok(vec![("current", s(update::VERSION)), ("latest", s(&l.version)), ("newer", J::Bool(l.newer && has)), ("notes", s(&l.notes)), ("file_missing", J::Bool(l.newer && !has)), ("repo", s(&source().repo)), ("platform", s(platform().unwrap_or("unknown")))])
         }
         Err(e) => bad(&e),
     }
@@ -142,5 +153,5 @@ pub fn source_resp(req: &Req) -> Resp {
     let cur = source();
     let token = j.get("token").and_then(|x| x.as_str()).map(|t| t.to_string()).unwrap_or(cur.token);
     let repo = j.get("repo").and_then(|x| x.as_str()).map(|t| t.to_string()).unwrap_or(cur.repo);
-    match save_source(&repo, &token) { Ok(()) => ok(vec![("msg", s("Saved."))]), Err(e) => bad(&e) }
+    match save_source(&repo, &token) { Ok(()) => ok(vec![("msg", s("Saved.")), ("repo", s(&source().repo))]), Err(e) => bad(&e) }
 }

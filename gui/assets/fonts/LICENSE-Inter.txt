@@ -1,0 +1,3 @@
+Inter is Copyright (c) The Inter Project Authors (https://github.com/rsms/inter).
+Licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org).
+These files are the Inter static fonts converted to TrueType outlines.

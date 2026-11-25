@@ -29,6 +29,15 @@ pub fn refresh(ui: &Weak<App>, st: &Shared) {
     });
 }
 
+/// Fills the "Last backup" tile on the hub home.
+pub fn last_backup(ui: &Weak<App>, c: &create_panel::client::Client) {
+    let (v, sub) = match c.get("/api/hub/backups") {
+        Ok(j) => match arr(&j, "items").first() { Some(b) => (when(gn(b, "mtime")), gs(b, "server")), None => ("None yet".to_string(), "Press Back up now".to_string()) },
+        Err(_) => return,
+    };
+    with_ui(ui, move |a| { a.set_hub_backup(SharedString::from(v)); a.set_hub_backup_sub(SharedString::from(sub)); });
+}
+
 fn save_file(u: &Weak<App>, c: &create_panel::client::Client, path: &str, name: &str) {
     say(u, "Downloading...");
     match c.raw("GET", path, None) {

@@ -1,6 +1,6 @@
 [package]
 name = "create-panel-app"
-version = "0.2.12"
+version = "0.2.13"
 edition = "2021"
 description = "Slate Server desktop app (Slint). Talks to the engine in ../ (the create-panel binary)."
 

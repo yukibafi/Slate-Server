@@ -166,6 +166,9 @@ fn apply_cards(a: &App, st: &Shared) {
     let online = all.iter().filter(|c| c.state.as_str() == "online").count();
     let players: i32 = all.iter().filter_map(|c| c.players.parse::<i32>().ok()).sum();
     a.set_hub_sub(SharedString::from(format!("{} server{} · {} online · {} player{} right now", all.len(), if all.len() == 1 { "" } else { "s" }, online, players, if players == 1 { "" } else { "s" })));
+    a.set_hub_online(SharedString::from(format!("{} of {}", online, all.len())));
+    a.set_hub_online_sub(SharedString::from(if all.is_empty() { "Add your first server" } else if online == 0 { "Everything is off" } else if online == all.len() { "All running" } else { "Some are off" }));
+    a.set_hub_players(SharedString::from(players.to_string()));
     a.set_cards(ModelRc::new(VecModel::from(shown)));
 }
 
@@ -180,6 +183,17 @@ fn poll_loop(ui: Weak<App>, st: Shared) {
             Ok(j) => {
                 let ip = j.get("hub").map(|h| arr(h, "ips")).and_then(|v| v.first().and_then(|x| x.as_str().map(|t| t.to_string()))).unwrap_or_default();
                 let cards: Vec<SrvCard> = arr(&j, "servers").iter().map(|e| card_of(e, &ip)).collect();
+                // who is on, and how much memory the running servers use (for the hub home tiles)
+                let mut who: Vec<(String, String, Color, String)> = vec![];
+                let mut mem_mb = 0i64;
+                for e in arr(&j, "servers").iter() {
+                    let live = matches!(gs(e, "state").as_str(), "online" | "starting");
+                    if live { mem_mb += gn(e, "mem_mb"); }
+                    let sname = gs(e, "name");
+                    for p in arr(e, "players") { if let Some(n) = p.as_str() { who.push((n.to_string(), sname.clone(), tint_of(&sname), letter_of(n))); } }
+                }
+                let who_more = who.len().saturating_sub(6) as i32;
+                who.truncate(6);
                 let wmax = cards.iter().map(|c| (!c.warn1.is_empty()) as usize + (!c.warn2.is_empty()) as usize).max().unwrap_or(0);
                 let ip = j.get("hub").map(|h| arr(h, "ips")).and_then(|v| v.first().and_then(|x| x.as_str().map(|t| t.to_string())));
                 let host = j.get("hub").map(|h| gs(h, "host")).unwrap_or_default();
@@ -188,6 +202,9 @@ fn poll_loop(ui: Weak<App>, st: Shared) {
                 let st_c = st.clone();
                 with_ui(&ui, move |a| {
                     apply_cards(a, &st_c);
+                    a.set_hub_mem(SharedString::from(if mem_mb > 0 { format!("{:.1} GB", mem_mb as f64 / 1024.0) } else { "-".to_string() }));
+                    a.set_hub_who_more(who_more);
+                    a.set_hub_who(ModelRc::new(VecModel::from(who.into_iter().map(|w| HubWho { name: w.0.into(), server: w.1.into(), tint: w.2, letter: w.3.into() }).collect::<Vec<_>>())));
                     a.set_card_h(330.0 + 52.0 * wmax as f32);
                     if local { if let Some(ip) = ip { let alt = if host.is_empty() { String::new() } else { format!(" (or {host}:{}, which doesn't change)", port()) }; a.set_where_text(SharedString::from(format!("This computer · address for Windows: {ip}:{}{alt}", port()))); a.set_where_ip(SharedString::from(format!("{ip}:{}", port()))); a.set_where_alt(SharedString::from(if host.is_empty() { String::new() } else { format!("{host}:{}", port()) })); } } else { a.set_where_ip(SharedString::new()); a.set_where_alt(SharedString::new()); }
                     let _ = key;
@@ -196,6 +213,7 @@ fn poll_loop(ui: Weak<App>, st: Shared) {
             Err(e) => { let m = format!("Lost the connection: {e}"); with_ui(&ui, move |a| { if a.get_page().as_str() != "connect" { a.set_note(SharedString::from(m)); } }); continue; }
         }
         if !wiz_checked { wiz_checked = true; hubmisc::wizard_load(&ui, &st, false); }
+        if tick % 20 == 1 { hubpage::last_backup(&ui, &c); }
         let (id, since) = { let g = st.lock().unwrap(); (g.sel.id.clone(), g.sel.since) };
         if id.is_empty() { continue; }
         if tick % 20 == 0 { extra::load_history(&ui, &st); people::load_stats(&ui, &st); extra::fp_fetch(&ui, &st); }

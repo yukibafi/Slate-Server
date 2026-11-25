@@ -1,4 +1,9 @@
 import { TextEdit, ScrollView, ListView, ComboBox } from "std-widgets.slint";
+import "../assets/fonts/Inter-Regular.ttf";
+import "../assets/fonts/Inter-Medium.ttf";
+import "../assets/fonts/Inter-SemiBold.ttf";
+import "../assets/fonts/Inter-Bold.ttf";
+import "../assets/fonts/Inter-ExtraBold.ttf";
 
 export global Theme {
     in-out property <color> bg: #0d0f12;
@@ -27,6 +32,8 @@ export global ThemeCtl {
     in-out property <color> sat-b: #7cc4ff;
     in-out property <color> val-b: #7cc4ff;
     in-out property <[color]> quick;
+    in-out property <[string]> quick-names;
+    in-out property <[color]> surf;
     callback changed();
     callback committed();
     callback hex-entered(string);
@@ -49,6 +56,7 @@ export struct ActRow { text: string, kind: int, time: string }
 export struct DpRow { name: string, size: string, kind: string }
 export struct BrowseRow { id: string, name: string, author: string, summary: string, downloads: string, installed: string, compat: bool, manual: bool, tint: color, letter: string, sel: bool, file: string, cats: string }
 export struct FileRow { name: string, path: string, dir: bool, size: string, mtime: string }
+export struct HubWho { name: string, server: string, tint: color, letter: string }
 export struct Crumb { name: string, path: string }
 
 
@@ -86,19 +94,6 @@ component ColorBar inherits Rectangle {
         }
         moved => { if (self.pressed) { root.moved-to(max(0.0, min(1.0, (self.mouse-x - 9px) / (root.width - 18px)))); } }
     }
-}
-
-component SurfaceBtn inherits Rectangle {
-    in property <string> label;
-    in property <bool> active;
-    callback clicked();
-    height: 32px;
-    border-radius: 8px;
-    border-width: 1px;
-    border-color: root.active ? Theme.accent : Theme.line;
-    background: root.active ? Theme.accent.with-alpha(0.16) : (st.has-hover ? Theme.panel2 : transparent);
-    Text { text: root.label; color: root.active ? Theme.accent : Theme.text; font-weight: 600; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
-    st := TouchArea { clicked => { root.clicked(); } }
 }
 
 component Btn inherits Rectangle {
@@ -522,55 +517,274 @@ component Head inherits Rectangle {
     if root.has: Image { source: root.src; source-clip-x: 40; source-clip-y: 8; source-clip-width: 8; source-clip-height: 8; image-rendering: pixelated; width: 100%; height: 100%; }
 }
 
-component ThemePicker inherits VerticalLayout {
-    spacing: 14px;
-    HorizontalLayout {
-        spacing: 16px;
-        Rectangle {
-            width: 76px;
-            height: 76px;
-            border-radius: 18px;
-            background: Theme.accent;
-            Text { text: "Aa"; color: Theme.on-accent; font-size: 26px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+component MiniWin inherits Rectangle {
+    in property <color> c-bg: Theme.bg;
+    in property <color> c-rail: Theme.rail;
+    in property <color> c-panel: Theme.panel;
+    in property <color> c-line: Theme.line;
+    in property <color> c-accent: Theme.accent;
+    in property <color> c-text: Theme.text;
+    property <length> rw: root.width * 0.24;
+    property <length> cw: (root.width - root.rw - 30px) / 2;
+    border-radius: 10px;
+    background: root.c-bg;
+    border-width: 1px;
+    border-color: root.c-line;
+    clip: true;
+    Rectangle {
+        x: 0px; y: 0px; width: root.rw; height: root.height;
+        background: root.c-rail;
+        Rectangle { x: 9px; y: 9px; width: 12px; height: 12px; border-radius: 4px; background: root.c-accent; }
+        for i in 3: Rectangle {
+            x: 9px; y: 30px + i * 14px; width: parent.width - 18px; height: 8px; border-radius: 4px;
+            background: i == 0 ? root.c-accent.with-alpha(0.4) : root.c-text.with-alpha(0.10);
         }
-        VerticalLayout {
-            spacing: 8px;
-            horizontal-stretch: 1;
-            alignment: center;
-            Text { text: "Accent colour"; color: Theme.text; font-weight: 800; font-size: 15px; }
-            Text { text: "Type any hex code, or drag the sliders. Everything updates live."; color: Theme.mute; font-size: 12px; }
-            HorizontalLayout {
-                spacing: 8px;
-                alignment: start;
-                TextBox { text <=> ThemeCtl.hex; placeholder: "#7CC4FF"; width: 130px; accepted(t) => { ThemeCtl.hex-entered(t); } }
-                Btn { label: "Apply"; clicked => { ThemeCtl.hex-entered(ThemeCtl.hex); } }
+    }
+    Rectangle { x: root.rw + 10px; y: 10px; width: 44px; height: 7px; border-radius: 3px; background: root.c-text.with-alpha(0.75); }
+    Rectangle {
+        x: root.rw + 10px; y: 28px; width: root.cw; height: root.height - 38px;
+        border-radius: 7px; background: root.c-panel; border-width: 1px; border-color: root.c-line;
+        Rectangle { x: 8px; y: 9px; width: parent.width * 0.5; height: 6px; border-radius: 3px; background: root.c-text.with-alpha(0.5); }
+        Rectangle {
+            x: 8px; y: 24px; width: parent.width - 16px; height: 6px; border-radius: 3px; background: root.c-text.with-alpha(0.12);
+            Rectangle { x: 0px; width: parent.width * 0.62; border-radius: 3px; background: root.c-accent; }
+        }
+    }
+    Rectangle {
+        x: root.rw + 20px + root.cw; y: 28px; width: root.cw; height: root.height - 38px;
+        border-radius: 7px; background: root.c-panel; border-width: 1px; border-color: root.c-line;
+        Rectangle { x: 8px; y: 9px; width: parent.width * 0.4; height: 6px; border-radius: 3px; background: root.c-text.with-alpha(0.5); }
+        Rectangle { x: 8px; y: parent.height - 24px; width: 40px; height: 14px; border-radius: 7px; background: root.c-accent; }
+    }
+}
+
+component ThemePicker inherits VerticalLayout {
+    in-out property <bool> fine: false;
+    out property <length> total: 664px + (root.fine ? 168px : 0px);
+    spacing: 14px;
+    // live preview of the whole app
+    Rectangle {
+        height: 150px;
+        border-radius: 14px;
+        background: Theme.rail;
+        border-width: 1px;
+        border-color: Theme.line;
+        HorizontalLayout {
+            padding: 14px;
+            spacing: 18px;
+            MiniWin { width: 260px; }
+            VerticalLayout {
+                alignment: center;
+                spacing: 6px;
+                horizontal-stretch: 1;
+                Text { text: "Live preview"; color: Theme.accent; font-size: 11px; font-weight: 800; }
+                Text { text: "This is your app right now"; color: Theme.text; font-size: 17px; font-weight: 800; overflow: elide; }
+                Text { text: "Pick a colour and a surface below. Every screen changes as you click."; color: Theme.mute; font-size: 12px; wrap: word-wrap; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Rectangle { width: 70px; height: 26px; border-radius: 13px; background: Theme.accent; Text { text: "Button"; color: Theme.on-accent; font-size: 12px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; } }
+                    Rectangle { width: 70px; height: 26px; border-radius: 13px; background: Theme.accent.with-alpha(0.16); Text { text: "Tab"; color: Theme.accent; font-size: 12px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; } }
+                    Rectangle { width: 70px; height: 26px; border-radius: 13px; background: Theme.good.with-alpha(0.16); Text { text: "Online"; color: Theme.good; font-size: 12px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; } }
+                }
             }
         }
     }
-    HorizontalLayout { spacing: 12px; Text { text: "Hue"; color: Theme.mute; font-size: 12px; width: 70px; vertical-alignment: center; } ColorBar { value: ThemeCtl.hue; track: @linear-gradient(90deg, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%); moved-to(v) => { ThemeCtl.hue = v; ThemeCtl.changed(); } released => { ThemeCtl.committed(); } } }
-    HorizontalLayout { spacing: 12px; Text { text: "Intensity"; color: Theme.mute; font-size: 12px; width: 70px; vertical-alignment: center; } ColorBar { value: ThemeCtl.sat; track: @linear-gradient(90deg, ThemeCtl.sat-a, ThemeCtl.sat-b); moved-to(v) => { ThemeCtl.sat = v; ThemeCtl.changed(); } released => { ThemeCtl.committed(); } } }
-    HorizontalLayout { spacing: 12px; Text { text: "Brightness"; color: Theme.mute; font-size: 12px; width: 70px; vertical-alignment: center; } ColorBar { value: ThemeCtl.val; track: @linear-gradient(90deg, #000000, ThemeCtl.val-b); moved-to(v) => { ThemeCtl.val = v; ThemeCtl.changed(); } released => { ThemeCtl.committed(); } } }
-    HorizontalLayout {
+    Text { text: "Accent colour"; color: Theme.text; font-weight: 800; font-size: 15px; height: 22px; }
+    for r in 4: HorizontalLayout {
         spacing: 8px;
-        alignment: start;
-        VerticalLayout { alignment: center; Text { text: "Quick start"; color: Theme.mute; font-size: 12px; width: 70px; } }
-        for c[i] in ThemeCtl.quick: Rectangle {
-            width: 26px;
-            height: 26px;
-            border-radius: 13px;
-            background: c;
-            border-width: 2px;
-            border-color: Theme.line;
-            TouchArea { clicked => { ThemeCtl.pick-quick(i); } }
+        height: 56px;
+        for k in 5: Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 12px;
+            background: ta.has-hover ? Theme.panel2 : Theme.rail;
+            border-width: ThemeCtl.quick[r * 5 + k] == Theme.accent ? 2px : 1px;
+            border-color: ThemeCtl.quick[r * 5 + k] == Theme.accent ? Theme.accent : Theme.line;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 8px;
+                spacing: 10px;
+                VerticalLayout { alignment: center; Rectangle { width: 24px; height: 24px; border-radius: 12px; background: ThemeCtl.quick[r * 5 + k]; border-width: 2px; border-color: Theme.text.with-alpha(0.25); } }
+                VerticalLayout { alignment: center; Text { text: ThemeCtl.quick-names[r * 5 + k]; color: ThemeCtl.quick[r * 5 + k] == Theme.accent ? Theme.text : Theme.mute; font-size: 12px; font-weight: 600; overflow: elide; } }
+            }
+            ta := TouchArea { clicked => { ThemeCtl.pick-quick(r * 5 + k); } }
         }
     }
-    HorizontalLayout {
-        spacing: 8px;
-        VerticalLayout { alignment: center; Text { text: "Surfaces"; color: Theme.mute; font-size: 12px; width: 70px; } }
-        SurfaceBtn { label: "Graphite"; active: ThemeCtl.surface == "graphite"; clicked => { ThemeCtl.pick-surface("graphite"); } }
-        SurfaceBtn { label: "Tinted"; active: ThemeCtl.surface == "tinted"; clicked => { ThemeCtl.pick-surface("tinted"); } }
-        SurfaceBtn { label: "Black"; active: ThemeCtl.surface == "black"; clicked => { ThemeCtl.pick-surface("black"); } }
+    Rectangle {
+        height: 38px;
+        border-radius: 10px;
+        background: ft.has-hover ? Theme.panel2 : Theme.rail;
+        border-width: 1px;
+        border-color: Theme.line;
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 10px;
+            VerticalLayout { alignment: center; Rectangle { width: 16px; height: 16px; border-radius: 8px; background: Theme.accent; } }
+            VerticalLayout { alignment: center; horizontal-stretch: 1; Text { text: root.fine ? "Fine-tune your own colour" : "Fine-tune your own colour (hex code and sliders)"; color: Theme.text; font-size: 13px; font-weight: 600; } }
+            VerticalLayout { alignment: center; Text { text: root.fine ? "Hide" : "Open"; color: Theme.accent; font-size: 12px; font-weight: 700; } }
+        }
+        ft := TouchArea { clicked => { root.fine = !root.fine; } }
     }
+    if root.fine: VerticalLayout {
+        spacing: 12px;
+        height: 154px;
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            height: 36px;
+            VerticalLayout { alignment: center; Text { text: "Hex code"; color: Theme.mute; font-size: 12px; width: 70px; } }
+            TextBox { text <=> ThemeCtl.hex; placeholder: "#7CC4FF"; width: 130px; accepted(t) => { ThemeCtl.hex-entered(t); } }
+            Btn { label: "Apply"; clicked => { ThemeCtl.hex-entered(ThemeCtl.hex); } }
+        }
+        HorizontalLayout { spacing: 12px; Text { text: "Hue"; color: Theme.mute; font-size: 12px; width: 70px; vertical-alignment: center; } ColorBar { value: ThemeCtl.hue; track: @linear-gradient(90deg, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%); moved-to(v) => { ThemeCtl.hue = v; ThemeCtl.changed(); } released => { ThemeCtl.committed(); } } }
+        HorizontalLayout { spacing: 12px; Text { text: "Intensity"; color: Theme.mute; font-size: 12px; width: 70px; vertical-alignment: center; } ColorBar { value: ThemeCtl.sat; track: @linear-gradient(90deg, ThemeCtl.sat-a, ThemeCtl.sat-b); moved-to(v) => { ThemeCtl.sat = v; ThemeCtl.changed(); } released => { ThemeCtl.committed(); } } }
+        HorizontalLayout { spacing: 12px; Text { text: "Brightness"; color: Theme.mute; font-size: 12px; width: 70px; vertical-alignment: center; } ColorBar { value: ThemeCtl.val; track: @linear-gradient(90deg, #000000, ThemeCtl.val-b); moved-to(v) => { ThemeCtl.val = v; ThemeCtl.changed(); } released => { ThemeCtl.committed(); } } }
+    }
+    Text { text: "Surface"; color: Theme.text; font-weight: 800; font-size: 15px; height: 22px; }
+    HorizontalLayout {
+        spacing: 12px;
+        height: 140px;
+        for nm[i] in ["Graphite", "Tinted", "Black"]: Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 14px;
+            background: sa.has-hover ? Theme.panel2 : Theme.rail;
+            border-width: (ThemeCtl.surface == (i == 0 ? "graphite" : (i == 1 ? "tinted" : "black"))) ? 2px : 1px;
+            border-color: (ThemeCtl.surface == (i == 0 ? "graphite" : (i == 1 ? "tinted" : "black"))) ? Theme.accent : Theme.line;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+                MiniWin {
+                    height: 78px;
+                    c-bg: ThemeCtl.surf[i * 4];
+                    c-rail: ThemeCtl.surf[i * 4 + 1];
+                    c-panel: ThemeCtl.surf[i * 4 + 2];
+                    c-line: ThemeCtl.surf[i * 4 + 3];
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    padding-left: 2px;
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Text { text: nm; color: Theme.text; font-size: 13px; font-weight: 700; }
+                        Text { text: i == 0 ? "Neutral dark grey" : (i == 1 ? "Leans into your accent" : "True black, great on OLED"); color: Theme.faint; font-size: 11px; overflow: elide; }
+                    }
+                    if ThemeCtl.surface == (i == 0 ? "graphite" : (i == 1 ? "tinted" : "black")): VerticalLayout { alignment: center; Rectangle { width: 18px; height: 18px; border-radius: 9px; background: Theme.accent; Image { source: @image-url("../assets/icons/check.svg"); width: 11px; height: 11px; x: 3.5px; y: 3.5px; colorize: Theme.on-accent; } } }
+                }
+            }
+            sa := TouchArea { clicked => { ThemeCtl.pick-surface(i == 0 ? "graphite" : (i == 1 ? "tinted" : "black")); } }
+        }
+    }
+    Rectangle { vertical-stretch: 1; }
+}
+
+component PageHead inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> sub;
+    spacing: 12px;
+    height: 54px;
+    VerticalLayout {
+        alignment: center;
+        spacing: 3px;
+        Text { text: root.title; color: Theme.text; font-size: 28px; font-weight: 700; }
+        Text { text: root.sub; color: Theme.mute; font-size: 13px; overflow: elide; }
+    }
+    Rectangle { horizontal-stretch: 1; }
+    @children
+}
+
+component CardTitle inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> sub;
+    in property <image> icon;
+    spacing: 12px;
+    height: 40px;
+    VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 36px; height: 36px; border-radius: 11px; background: Theme.accent.with-alpha(0.14);
+            Image { source: root.icon; width: 18px; height: 18px; x: 9px; y: 9px; colorize: Theme.accent; }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        spacing: 2px;
+        horizontal-stretch: 1;
+        Text { text: root.title; color: Theme.text; font-weight: 800; font-size: 15px; overflow: elide; }
+        if root.sub != "": Text { text: root.sub; color: Theme.mute; font-size: 12px; overflow: elide; }
+    }
+    @children
+}
+
+component InfoTile inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> sub: "";
+    in property <color> tone: Theme.text;
+    in property <image> icon;
+    height: 84px;
+    border-radius: 14px;
+    background: Theme.panel;
+    border-width: 1px;
+    border-color: Theme.line;
+    HorizontalLayout {
+        padding: 16px;
+        spacing: 12px;
+        VerticalLayout { alignment: center; Rectangle { width: 36px; height: 36px; border-radius: 11px; background: root.tone.with-alpha(0.14); Image { source: root.icon; width: 18px; height: 18px; x: 9px; y: 9px; colorize: root.tone; } } }
+        VerticalLayout {
+            alignment: center;
+            spacing: 1px;
+            horizontal-stretch: 1;
+            Text { text: root.label; color: Theme.faint; font-size: 11px; font-weight: 700; overflow: elide; }
+            Text { text: root.value; color: Theme.text; font-size: 20px; font-weight: 800; overflow: elide; }
+            if root.sub != "": Text { text: root.sub; color: Theme.mute; font-size: 11px; overflow: elide; }
+        }
+    }
+}
+
+component FeatureRow inherits Rectangle {
+    in property <string> title;
+    in property <string> desc;
+    in-out property <bool> checked: false;
+    callback toggled(bool);
+    height: 58px;
+    Rectangle { y: 0px; height: 1px; background: Theme.line; }
+    HorizontalLayout {
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+            Text { text: root.title; color: Theme.text; font-weight: 700; font-size: 13px; overflow: elide; }
+            Text { text: root.desc; color: Theme.mute; font-size: 12px; overflow: elide; }
+        }
+        VerticalLayout { alignment: center; Toggle { checked: root.checked; toggled => { root.checked = self.checked; root.toggled(self.checked); } } }
+    }
+}
+
+component StepBadge inherits Rectangle {
+    in property <int> n;
+    in property <bool> done: false;
+    width: 30px;
+    height: 30px;
+    border-radius: 15px;
+    background: root.done ? Theme.good : Theme.panel2;
+    border-width: root.done ? 0px : 1px;
+    border-color: Theme.line2;
+    if !root.done: Text { text: "\{root.n}"; color: Theme.mute; font-weight: 800; font-size: 13px; horizontal-alignment: center; vertical-alignment: center; }
+    if root.done: Image { source: @image-url("../assets/icons/check.svg"); width: 14px; height: 14px; x: 8px; y: 8px; colorize: Theme.on-accent; }
+}
+
+component NoteBar inherits Rectangle {
+    in property <string> text;
+    in property <color> tone: Theme.warn;
+    height: 40px;
+    border-radius: 11px;
+    background: root.tone.with-alpha(0.10);
+    border-width: 1px;
+    border-color: root.tone.with-alpha(0.35);
+    Text { x: 14px; width: parent.width - 28px; text: root.text; color: root.tone; font-size: 12px; font-weight: 600; vertical-alignment: center; overflow: elide; }
 }
 
 component HubRail inherits Rectangle {
@@ -773,6 +987,7 @@ export component App inherits Window {
     min-width: 1000px;
     min-height: 600px;
     background: Theme.bg;
+    default-font-family: "Inter";
     default-font-size: 13px;
 
     in-out property <string> server-letter: "C";
@@ -893,6 +1108,9 @@ export component App inherits Window {
     callback upd-check();
     callback upd-install();
     callback upd-save-token(string);
+    callback upd-save-repo(string);
+    in-out property <string> upd-repo: "";
+    in-out property <string> upd-cur: "";
     in-out property <string> upd-avail: "";
     in-out property <string> upd-msg: "";
     in-out property <bool> upd-busy: false;
@@ -1116,6 +1334,14 @@ export component App inherits Window {
     in-out property <string> hub-search: "";
     in-out property <int> hub-total: 0;
     in-out property <string> hub-sub: "";
+    in-out property <string> hub-online: "0";
+    in-out property <string> hub-online-sub: "";
+    in-out property <string> hub-players: "0";
+    in-out property <string> hub-mem: "-";
+    in-out property <string> hub-backup: "-";
+    in-out property <string> hub-backup-sub: "";
+    in-out property <[HubWho]> hub-who;
+    in-out property <int> hub-who-more: 0;
     in-out property <string> where-ip: "";
     in-out property <string> where-alt: "";
     in-out property <string> announce-text: "";
@@ -1271,6 +1497,14 @@ export component App inherits Window {
                     VerticalLayout { alignment: center; Btn { label: "Update now"; primary: true; height: 34px; enabled: !root.upd-busy; clicked => { root.upd-install(); } } }
                 }
             }
+            // at-a-glance tiles
+            HorizontalLayout {
+                spacing: 14px;
+                InfoTile { horizontal-stretch: 1; label: "SERVERS ONLINE"; value: root.hub-online; sub: root.hub-online-sub; tone: Theme.good; icon: @image-url("../assets/icons/server.svg"); }
+                InfoTile { horizontal-stretch: 1; label: "PLAYERS RIGHT NOW"; value: root.hub-players; sub: root.hub-who.length > 0 ? "Across all your servers" : "Nobody is playing"; tone: Theme.accent; icon: @image-url("../assets/icons/users.svg"); }
+                InfoTile { horizontal-stretch: 1; label: "MEMORY IN USE"; value: root.hub-mem; sub: "By running servers"; tone: Theme.warn; icon: @image-url("../assets/icons/bolt.svg"); }
+                InfoTile { horizontal-stretch: 1; label: "LAST BACKUP"; value: root.hub-backup; sub: root.hub-backup-sub; tone: Theme.mute; icon: @image-url("../assets/icons/archive.svg"); }
+            }
             // card grid (as many columns as fit)
             grid := Rectangle {
                 property <length> gap: 20px;
@@ -1391,6 +1625,61 @@ export component App inherits Window {
                 }
             }
             if root.cards.length == 0: Text { text: "No servers yet. Create a new one, or import the servers from your old panel."; color: Theme.mute; wrap: word-wrap; }
+            // widgets under the cards
+            HorizontalLayout {
+                spacing: 18px;
+                Panel {
+                    horizontal-stretch: 3;
+                    height: max(250px, 90px + root.hub-who.length * 46px + (root.hub-who-more > 0 ? 28px : 0px));
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 8px;
+                        CardTitle { title: "Who's online"; sub: root.hub-who.length == 0 ? "" : "Players on all your servers"; icon: @image-url("../assets/icons/users.svg"); }
+                        if root.hub-who.length == 0: VerticalLayout {
+                            alignment: center;
+                            spacing: 4px;
+                            vertical-stretch: 1;
+                            Text { text: "Nobody is playing right now"; color: Theme.text; font-weight: 700; horizontal-alignment: center; }
+                            Text { text: "When someone joins, they show up here with the server they are on."; color: Theme.mute; font-size: 12px; horizontal-alignment: center; }
+                        }
+                        for w in root.hub-who: Rectangle {
+                            height: 38px;
+                            border-radius: 10px;
+                            background: Theme.rail;
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 12px;
+                                spacing: 10px;
+                                VerticalLayout { alignment: center; Rectangle { width: 26px; height: 26px; border-radius: 8px; background: w.tint.with-alpha(0.22); Text { text: w.letter; color: w.tint; font-weight: 800; font-size: 13px; horizontal-alignment: center; vertical-alignment: center; } } }
+                                Text { text: w.name; color: Theme.text; font-weight: 600; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                                Text { text: w.server; color: Theme.faint; font-size: 12px; vertical-alignment: center; overflow: elide; }
+                            }
+                        }
+                        if root.hub-who-more > 0: Text { text: "and \{root.hub-who-more} more"; color: Theme.mute; font-size: 12px; height: 20px; }
+                    }
+                }
+                Panel {
+                    horizontal-stretch: 2;
+                    height: max(250px, 90px + root.hub-who.length * 46px + (root.hub-who-more > 0 ? 28px : 0px));
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 10px;
+                        CardTitle { title: "Quick actions"; sub: "The things you do most"; icon: @image-url("../assets/icons/wand.svg"); }
+                        Btn { label: "Back up everything now"; icon: @image-url("../assets/icons/archive.svg"); primary: true; clicked => { root.go-hub-page("hbackups"); root.hb-run(); } }
+                        HorizontalLayout {
+                            spacing: 10px;
+                            Btn { label: "Start all"; icon: @image-url("../assets/icons/play.svg"); horizontal-stretch: 1; clicked => { root.all-action("start"); } }
+                            Btn { label: "Stop all"; icon: @image-url("../assets/icons/stop.svg"); horizontal-stretch: 1; clicked => { root.all-action("stop"); } }
+                        }
+                        HorizontalLayout {
+                            spacing: 10px;
+                            Btn { label: "Discord bot"; icon: @image-url("../assets/icons/bolt.svg"); horizontal-stretch: 1; clicked => { root.go-hub-page("discord"); } }
+                            Btn { label: "Change the look"; icon: @image-url("../assets/icons/sliders.svg"); horizontal-stretch: 1; clicked => { root.go-hub-page("settings"); } }
+                        }
+                        Rectangle { vertical-stretch: 1; }
+                    }
+                }
+            }
           }
         }
     }
@@ -2612,8 +2901,8 @@ export component App inherits Window {
                             Text { text: "Look"; color: Theme.text; font-size: 22px; font-weight: 700; }
                             Text { text: "Pick the accent colour and surface style. Changes apply to the whole app straight away."; color: Theme.mute; font-size: 12px; }
                             Panel {
-                                height: 340px;
-                                ThemePicker { padding: 22px; }
+                                height: tp.total + 44px;
+                                tp := ThemePicker { padding: 22px; }
                             }
                         }
                         if root.set-tab == "auto": VerticalLayout {
@@ -2958,101 +3247,147 @@ export component App inherits Window {
             goto(k) => { root.go-hub-page(k); }
             copy(t) => { root.copy-text(t); }
         }
-        VerticalLayout {
+        ScrollView {
             horizontal-stretch: 1;
-        Timer { interval: 3s; running: root.page == "hbackups"; triggered => { root.hb-refresh(); } }
-        padding: 24px;
-        spacing: 14px;
-        HorizontalLayout {
-            spacing: 10px;
-            VerticalLayout { alignment: center; Text { text: "Backups"; color: Theme.text; font-size: 28px; font-weight: 700; } }
-            Rectangle { horizontal-stretch: 1; }
-        }
-        Seg { width: 420px; height: 38px; items: ["World safety net", "Move to another computer"]; index: root.hb-tab == "bk" ? 0 : 1; picked(i) => { root.hb-tab = i == 0 ? "bk" : "mig"; } }
-        if root.hb-tab == "bk": VerticalLayout {
-            spacing: 12px;
-            Panel {
-                height: 150px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 10px;
-                    Text { text: "Automatic backups of every server's world, kept outside the servers. Deleted servers get a last backup too, so nothing is ever lost by accident."; color: Theme.mute; wrap: word-wrap; }
+            Timer { interval: 3s; running: root.page == "hbackups"; triggered => { root.hb-refresh(); } }
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+                alignment: start;
+                PageHead { title: "Backups"; sub: "Your worlds, kept safe outside the servers."; }
+                Seg { width: 420px; height: 38px; items: ["World safety net", "Move to another computer"]; index: root.hb-tab == "bk" ? 0 : 1; picked(i) => { root.hb-tab = i == 0 ? "bk" : "mig"; } }
+                if root.hb-tab == "bk": VerticalLayout {
+                    spacing: 14px;
                     HorizontalLayout {
-                        spacing: 10px;
-                        Toggle { checked: root.hb-auto; toggled => { root.hb-config("auto", self.checked ? "1" : "0"); } }
-                        VerticalLayout { alignment: center; Text { text: "Back up automatically every"; color: Theme.text; } }
-                        TextBox { width: 60px; text <=> root.hb-hours; accepted(t) => { root.hb-config("hours", t); } }
-                        VerticalLayout { alignment: center; Text { text: "hours, keep"; color: Theme.text; } }
-                        TextBox { width: 60px; text <=> root.hb-keep; accepted(t) => { root.hb-config("keep", t); } }
-                        VerticalLayout { alignment: center; Text { text: "per world"; color: Theme.text; } }
-                        Btn { label: "Save"; clicked => { root.hb-config("hours", root.hb-hours); root.hb-config("keep", root.hb-keep); } }
-                        Rectangle { horizontal-stretch: 1; }
+                        spacing: 12px;
+                        InfoTile { horizontal-stretch: 1; label: "BACKUPS KEPT"; value: "\{root.hb-rows.length}"; sub: root.hb-auto ? "Automatic backups are on" : "Automatic backups are off"; tone: root.hb-auto ? Theme.good : Theme.warn; icon: @image-url("../assets/icons/archive.svg"); }
+                        InfoTile { horizontal-stretch: 1; label: "LAST BACKUP"; value: root.hb-rows.length > 0 ? root.hb-rows[0].ago : "None yet"; sub: root.hb-rows.length > 0 ? root.hb-rows[0].server : "Press the button below"; tone: Theme.accent; icon: @image-url("../assets/icons/clock.svg"); }
+                        InfoTile { horizontal-stretch: 1; label: "DISK SPACE"; value: root.hb-free != "" ? root.hb-free : "-"; sub: "On the computer holding the backups"; tone: Theme.mute; icon: @image-url("../assets/icons/server.svg"); }
                     }
-                    HorizontalLayout {
-                        spacing: 10px;
-                        Btn { label: root.hb-busy ? "Backing up..." : "Back up everything now"; primary: true; enabled: !root.hb-busy; clicked => { root.hb-run(); } }
-                        VerticalLayout { alignment: center; Text { text: root.hb-msg; color: Theme.mute; } }
-                        Rectangle { horizontal-stretch: 1; }
-                        VerticalLayout { alignment: center; Text { text: root.hb-free; color: Theme.mute; } }
-                    }
-                }
-            }
-            Panel {
-                height: 380px;
-                VerticalLayout {
-                    padding: 8px;
-                    if root.hb-rows.length == 0: Text { text: "No backups yet. The first one runs a couple of minutes after the engine starts, or press the button above."; color: Theme.mute; wrap: word-wrap; }
-                    ListView {
-                        for b in root.hb-rows: Rectangle {
-                            height: 50px;
+                    Panel {
+                        height: 214px;
+                        VerticalLayout {
+                            padding: 20px;
+                            spacing: 12px;
+                            CardTitle {
+                                title: "Automatic backups";
+                                sub: "Every server's world, plus a last copy when a server is deleted. Nothing is lost by accident.";
+                                icon: @image-url("../assets/icons/clock.svg");
+                                VerticalLayout { alignment: center; Toggle { checked: root.hb-auto; toggled => { root.hb-config("auto", self.checked ? "1" : "0"); } } }
+                            }
+                            Rectangle { height: 1px; background: Theme.line; }
                             HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
                                 spacing: 10px;
-                                VerticalLayout { alignment: center; horizontal-stretch: 1;
-                                    Text { text: b.server + (b.kind == "deleted" ? "  (deleted server)" : ""); color: Theme.text; font-weight: 700; overflow: elide; }
-                                    Text { text: b.name + "  " + b.size + "  " + b.ago; color: Theme.mute; font-size: 11px; overflow: elide; }
+                                height: 38px;
+                                VerticalLayout { alignment: center; Text { text: "Back up every"; color: Theme.text; } }
+                                TextBox { width: 64px; text <=> root.hb-hours; accepted(t) => { root.hb-config("hours", t); } }
+                                VerticalLayout { alignment: center; Text { text: "hours and keep the newest"; color: Theme.text; } }
+                                TextBox { width: 64px; text <=> root.hb-keep; accepted(t) => { root.hb-config("keep", t); } }
+                                VerticalLayout { alignment: center; Text { text: "per world"; color: Theme.text; } }
+                                Btn { label: "Save"; clicked => { root.hb-config("hours", root.hb-hours); root.hb-config("keep", root.hb-keep); } }
+                                Rectangle { horizontal-stretch: 1; }
+                            }
+                            HorizontalLayout {
+                                spacing: 12px;
+                                height: 38px;
+                                Btn { icon: @image-url("../assets/icons/archive.svg"); label: root.hb-busy ? "Backing up..." : "Back up everything now"; primary: true; enabled: !root.hb-busy; clicked => { root.hb-run(); } }
+                                VerticalLayout { alignment: center; horizontal-stretch: 1; Text { text: root.hb-msg; color: Theme.mute; overflow: elide; } }
+                            }
+                        }
+                    }
+                    Panel {
+                        height: root.hb-rows.length == 0 ? 150px : 84px + root.hb-rows.length * 58px;
+                        VerticalLayout {
+                            padding: 20px;
+                            spacing: 8px;
+                            CardTitle { title: "Your backups"; sub: root.hb-rows.length == 0 ? "" : "\{root.hb-rows.length} saved, newest first"; icon: @image-url("../assets/icons/folder.svg"); }
+                            if root.hb-rows.length == 0: VerticalLayout {
+                                alignment: center;
+                                vertical-stretch: 1;
+                                Text { text: "No backups yet."; color: Theme.text; font-weight: 700; horizontal-alignment: center; }
+                                Text { text: "The first one runs a couple of minutes after the engine starts, or press the button above."; color: Theme.mute; font-size: 12px; horizontal-alignment: center; }
+                            }
+                            for b in root.hb-rows: Rectangle {
+                                height: 50px;
+                                border-radius: 10px;
+                                background: rowta.has-hover ? Theme.panel2 : transparent;
+                                rowta := TouchArea { }
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 6px;
+                                    spacing: 8px;
+                                    VerticalLayout { alignment: center; horizontal-stretch: 1;
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            alignment: start;
+                                            Text { text: b.server; color: Theme.text; font-weight: 700; overflow: elide; vertical-alignment: center; }
+                                            if b.kind == "deleted": Rectangle { width: 120px; height: 18px; border-radius: 9px; background: Theme.warn.with-alpha(0.16); Text { text: "Deleted server"; color: Theme.warn; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; } }
+                                        }
+                                        Text { text: b.size + "  -  " + b.ago + "  -  " + b.name; color: Theme.mute; font-size: 11px; overflow: elide; }
+                                    }
+                                    VerticalLayout { alignment: center; Btn { label: "Download"; height: 30px; clicked => { root.hb-download(b.rel); } } }
+                                    VerticalLayout { alignment: center; Btn { label: "Unpack"; height: 30px; clicked => { root.hb-restore(b.rel); } } }
+                                    VerticalLayout { alignment: center; ConfirmBtn { label: "Delete"; h: 30px; confirmed => { root.hb-delete(b.rel); } } }
                                 }
-                                VerticalLayout { alignment: center; Btn { label: "Download"; height: 28px; clicked => { root.hb-download(b.rel); } } }
-                                VerticalLayout { alignment: center; Btn { label: "Unpack"; height: 28px; clicked => { root.hb-restore(b.rel); } } }
-                                VerticalLayout { alignment: center; ConfirmBtn { label: "Delete"; h: 28px; confirmed => { root.hb-delete(b.rel); } } }
                             }
                         }
                     }
                 }
+                if root.hb-tab == "mig": VerticalLayout {
+                    spacing: 14px;
+                    Panel {
+                        height: 270px;
+                        VerticalLayout {
+                            padding: 20px;
+                            spacing: 12px;
+                            CardTitle { title: "1. Back up everything"; sub: "One zip with all your servers, mods, configs and worlds. It lands on your Desktop."; icon: @image-url("../assets/icons/upload.svg"); }
+                            Rectangle { height: 1px; background: Theme.line; }
+                            HorizontalLayout { spacing: 12px; height: 28px; VerticalLayout { alignment: center; Toggle { checked: root.mig-stop; toggled => { root.mig-stop = self.checked; } } } VerticalLayout { alignment: center; Text { text: "Stop running servers first (worlds are saved cleanly)"; color: Theme.text; overflow: elide; } } }
+                            HorizontalLayout { spacing: 12px; height: 28px; VerticalLayout { alignment: center; Toggle { checked: root.mig-backups; toggled => { root.mig-backups = self.checked; } } } VerticalLayout { alignment: center; Text { text: "Include each server's old backups (bigger file)"; color: Theme.text; overflow: elide; } } }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                height: 38px;
+                                Btn { label: "Create the backup"; primary: true; clicked => { root.mig-backup(); } }
+                                Btn { label: "Download last one"; enabled: root.mig-last != ""; clicked => { root.mig-download(); } }
+                                VerticalLayout { alignment: center; horizontal-stretch: 1; Text { text: root.mig-last; color: Theme.mute; font-size: 12px; overflow: elide; } }
+                            }
+                            Rectangle { vertical-stretch: 1; }
+                        }
+                    }
+                    Panel {
+                        height: root.bundles.length == 0 ? 206px : 176px + root.bundles.length * 48px;
+                        VerticalLayout {
+                            padding: 20px;
+                            spacing: 12px;
+                            CardTitle { title: "2. Restore on the new computer"; sub: "Restored servers are added next to the ones you have. Nothing is overwritten."; icon: @image-url("../assets/icons/download.svg"); }
+                            Rectangle { height: 1px; background: Theme.line; }
+                            if root.bundles.length == 0: Text { text: "No backups found in Downloads, Desktop or Documents. Paste a path below."; color: Theme.mute; font-size: 12px; height: 20px; }
+                            for b in root.bundles: Rectangle {
+                                height: 36px;
+                                border-radius: 9px;
+                                background: Theme.rail;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 5px;
+                                    spacing: 8px;
+                                    Text { text: b.name + "   " + b.size; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                                    VerticalLayout { alignment: center; Btn { label: "Restore this"; height: 28px; clicked => { root.mig-restore(b.path); } } }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                height: 38px;
+                                TextBox { placeholder: "or paste the path of a Server Hub Backup zip"; text <=> root.mig-path; horizontal-stretch: 1; }
+                                Btn { label: "Restore"; primary: true; clicked => { root.mig-restore(root.mig-path); } }
+                            }
+                            Rectangle { vertical-stretch: 1; }
+                        }
+                    }
+                    if root.mig-msg != "": NoteBar { text: root.mig-msg; }
+                }
             }
         }
-        if root.hb-tab == "mig": ScrollView { VerticalLayout {
-            spacing: 12px;
-            alignment: start;
-            Panel {
-                height: 190px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 10px;
-                    Text { text: "Back up everything"; color: Theme.text; font-weight: 800; font-size: 15px; }
-                    Text { text: "Makes one zip with all your servers, mods, configs and worlds. Put it on the new computer and restore it there. It lands on your Desktop."; color: Theme.mute; wrap: word-wrap; }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.mig-stop; toggled => { root.mig-stop = self.checked; } } VerticalLayout { alignment: center; Text { text: "Stop running servers first (worlds are saved cleanly)"; color: Theme.text; } } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.mig-backups; toggled => { root.mig-backups = self.checked; } } VerticalLayout { alignment: center; Text { text: "Include each server's old backups (bigger file)"; color: Theme.text; } } }
-                    HorizontalLayout { spacing: 8px; Btn { label: "Create the backup"; primary: true; clicked => { root.mig-backup(); } } Btn { label: "Download last one"; enabled: root.mig-last != ""; clicked => { root.mig-download(); } } VerticalLayout { alignment: center; Text { text: root.mig-last; color: Theme.mute; overflow: elide; } } }
-                }
-            }
-            Panel {
-                height: 300px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 8px;
-                    Text { text: "Restore from a backup"; color: Theme.text; font-weight: 800; font-size: 15px; }
-                    Text { text: "Pick a backup found on this computer, or paste the path of a Server Hub Backup zip. Restored servers are added next to the ones you have, nothing is overwritten."; color: Theme.mute; wrap: word-wrap; }
-                    if root.bundles.length == 0: Text { text: "No backups found in Downloads, Desktop or Documents."; color: Theme.mute; }
-                    for b in root.bundles: HorizontalLayout { spacing: 8px; height: 30px; Text { text: b.name + "  " + b.size; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; } VerticalLayout { alignment: center; Btn { label: "Restore this"; height: 26px; clicked => { root.mig-restore(b.path); } } } }
-                    HorizontalLayout { spacing: 8px; TextBox { placeholder: "/path/to/Server Hub Backup.zip"; text <=> root.mig-path; horizontal-stretch: 1; } Btn { label: "Restore"; primary: true; clicked => { root.mig-restore(root.mig-path); } } }
-                }
-            }
-            if root.mig-msg != "": Text { text: root.mig-msg; color: Theme.warn; wrap: word-wrap; }
-        } }
-            }
-}
+    }
 
     // ---------------------------------------------------------------- discord bot
     if page == "discord": HorizontalLayout {
@@ -3066,131 +3401,181 @@ export component App inherits Window {
             goto(k) => { root.go-hub-page(k); }
             copy(t) => { root.copy-text(t); }
         }
-        VerticalLayout { horizontal-stretch: 1; ScrollView {
-        Timer { interval: 2s; running: root.page == "discord"; triggered => { root.dc-refresh(); } }
-        VerticalLayout {
-            padding: 24px;
-            spacing: 14px;
-            alignment: start;
-            HorizontalLayout {
-                spacing: 10px;
-                VerticalLayout { alignment: center; Text { text: "Discord bot"; color: Theme.text; font-size: 28px; font-weight: 700; } }
-                Rectangle { horizontal-stretch: 1; }
-                StatePill { state: root.dc-running ? "online" : "offline"; }
-            }
-            Text { text: "Runs your Discord bot on this computer: /start (admins turn a server on), /modlist, /fingerprint (AutoModpack), a welcome message and more. It uses its own private Python, so nothing is installed system-wide."; color: Theme.mute; wrap: word-wrap; }
-            if root.dc-msg != "": Text { text: root.dc-msg; color: Theme.warn; wrap: word-wrap; }
-            if root.dc-note != "": Text { text: root.dc-note; color: Theme.warn; wrap: word-wrap; }
-            Panel {
-                height: 118px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 8px;
-                    Text { text: "1. Install"; color: Theme.text; font-weight: 800; }
-                    Text { text: root.dc-installing ? root.dc-install-msg : (root.dc-installed ? "Installed. " + root.dc-install-msg : "Needs Python 3 on this computer. Downloads discord.py (about a minute)."); color: Theme.mute; wrap: word-wrap; }
-                    HorizontalLayout { Btn { label: root.dc-installed ? "Reinstall / repair" : "Install the bot"; primary: !root.dc-installed; enabled: !root.dc-installing; clicked => { root.dc-install(); } } Rectangle { horizontal-stretch: 1; } }
+        ScrollView {
+            horizontal-stretch: 1;
+            Timer { interval: 2s; running: root.page == "discord"; triggered => { root.dc-refresh(); } }
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+                alignment: start;
+                PageHead {
+                    title: "Discord bot";
+                    sub: "Slash commands and server alerts for your community.";
+                    VerticalLayout { alignment: center; StatePill { state: root.dc-running ? "online" : "offline"; } }
                 }
-            }
-            Panel {
-                height: 150px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 8px;
-                    Text { text: "2. Bot token"; color: Theme.text; font-weight: 800; }
-                    Text { text: root.dc-token-set ? "A token is saved (it is never shown again). Paste a new one to replace it, or save an empty box to remove it." : "Discord Developer Portal, your application, Bot page, Reset Token. Paste it here."; color: Theme.mute; wrap: word-wrap; }
+                if root.dc-msg != "": NoteBar { text: root.dc-msg; }
+                if root.dc-note != "": NoteBar { text: root.dc-note; }
+                // status + controls
+                Rectangle {
+                    height: 96px;
+                    border-radius: 16px;
+                    background: root.dc-running ? Theme.good.with-alpha(0.10) : Theme.panel;
+                    border-width: 1px;
+                    border-color: root.dc-running ? Theme.good.with-alpha(0.4) : Theme.line;
                     HorizontalLayout {
-                        spacing: 8px;
-                        TextBox { placeholder: "Bot token"; password: true; text <=> root.dc-token; horizontal-stretch: 1; accepted(t) => { root.dc-save-token(t); } }
-                        Btn { label: "Save token"; primary: true; clicked => { root.dc-save-token(root.dc-token); } }
+                        padding: 20px;
+                        spacing: 14px;
+                        VerticalLayout { alignment: center; Rectangle { width: 48px; height: 48px; border-radius: 14px; background: (root.dc-running ? Theme.good : Theme.faint).with-alpha(0.18); Image { source: @image-url("../assets/icons/bolt.svg"); width: 24px; height: 24px; x: 12px; y: 12px; colorize: root.dc-running ? Theme.good : Theme.faint; } } }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 3px;
+                            horizontal-stretch: 1;
+                            Text { text: root.dc-running ? "The bot is online" : (root.dc-installed && root.dc-token-set ? "The bot is ready to start" : "The bot isn't set up yet"); color: Theme.text; font-weight: 800; font-size: 17px; }
+                            Text { text: root.dc-running ? "Up for " + root.dc-uptime : (root.dc-installed && root.dc-token-set ? "Press Start and it joins your Discord server." : "Follow the three steps below."); color: Theme.mute; font-size: 12px; overflow: elide; }
+                        }
+                        VerticalLayout { alignment: center; Btn { label: "Start"; icon: @image-url("../assets/icons/play.svg"); primary: true; enabled: !root.dc-running && root.dc-installed && root.dc-token-set; clicked => { root.dc-action("start"); } } }
+                        VerticalLayout { alignment: center; Btn { label: "Restart"; icon: @image-url("../assets/icons/refresh.svg"); enabled: root.dc-running; clicked => { root.dc-action("restart"); } } }
+                        VerticalLayout { alignment: center; Btn { label: "Stop"; icon: @image-url("../assets/icons/stop.svg"); danger: true; enabled: root.dc-running; clicked => { root.dc-action("stop"); } } }
                     }
                 }
-            }
-            Panel {
-                height: 118px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 8px;
-                    Text { text: "3. Add it to your Discord server"; color: Theme.text; font-weight: 800; }
-                    Text { text: root.dc-invite == "" ? "Save the token first and the invite link shows up here." : root.dc-invite; color: Theme.mute; wrap: word-wrap; }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        Btn { label: "Copy link"; enabled: root.dc-invite != ""; clicked => { root.dc-copy(root.dc-invite); } }
-                        Btn { label: "Open in browser"; enabled: root.dc-invite != ""; clicked => { root.dc-open(root.dc-invite); } }
-                        Rectangle { horizontal-stretch: 1; }
+                // set-up steps
+                Panel {
+                    height: 392px;
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 14px;
+                        CardTitle { title: "Set up"; sub: "Three steps, one time only."; icon: @image-url("../assets/icons/wand.svg"); }
+                        Rectangle { height: 1px; background: Theme.line; }
+                        HorizontalLayout {
+                            spacing: 14px;
+                            height: 58px;
+                            VerticalLayout { alignment: start; StepBadge { n: 1; done: root.dc-installed; } }
+                            VerticalLayout {
+                                spacing: 3px;
+                                horizontal-stretch: 1;
+                                Text { text: "Install the bot"; color: Theme.text; font-weight: 700; }
+                                Text { text: root.dc-installing ? root.dc-install-msg : (root.dc-installed ? "Installed. " + root.dc-install-msg : "Needs Python 3 on this computer. Downloads discord.py (about a minute)."); color: Theme.mute; font-size: 12px; wrap: word-wrap; }
+                            }
+                            VerticalLayout { alignment: start; Btn { label: root.dc-installed ? "Repair" : "Install"; primary: !root.dc-installed; enabled: !root.dc-installing; clicked => { root.dc-install(); } } }
+                        }
+                        Rectangle { height: 1px; background: Theme.line; }
+                        HorizontalLayout {
+                            spacing: 14px;
+                            height: 100px;
+                            VerticalLayout { alignment: start; StepBadge { n: 2; done: root.dc-token-set; } }
+                            VerticalLayout {
+                                spacing: 6px;
+                                horizontal-stretch: 1;
+                                Text { text: "Paste the bot token"; color: Theme.text; font-weight: 700; }
+                                Text { text: root.dc-token-set ? "A token is saved (never shown again). Paste a new one to replace it, or save an empty box to remove it." : "Discord Developer Portal, your application, Bot page, Reset Token."; color: Theme.mute; font-size: 12px; wrap: word-wrap; }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    height: 38px;
+                                    TextBox { placeholder: "Bot token"; password: true; text <=> root.dc-token; horizontal-stretch: 1; accepted(t) => { root.dc-save-token(t); } }
+                                    Btn { label: "Save token"; primary: true; clicked => { root.dc-save-token(root.dc-token); } }
+                                }
+                            }
+                        }
+                        Rectangle { height: 1px; background: Theme.line; }
+                        HorizontalLayout {
+                            spacing: 14px;
+                            height: 74px;
+                            VerticalLayout { alignment: start; StepBadge { n: 3; done: root.dc-invite != ""; } }
+                            VerticalLayout {
+                                spacing: 6px;
+                                horizontal-stretch: 1;
+                                Text { text: "Add it to your Discord server"; color: Theme.text; font-weight: 700; }
+                                Text { text: root.dc-invite == "" ? "Save the token first and the invite link shows up here." : root.dc-invite; color: Theme.mute; font-size: 12px; overflow: elide; }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    alignment: start;
+                                    height: 32px;
+                                    Btn { label: "Copy link"; height: 32px; enabled: root.dc-invite != ""; clicked => { root.dc-copy(root.dc-invite); } }
+                                    Btn { label: "Open in browser"; height: 32px; enabled: root.dc-invite != ""; clicked => { root.dc-open(root.dc-invite); } }
+                                }
+                            }
+                        }
                     }
                 }
-            }
-            Panel {
-                height: 96px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 8px;
-                    Text { text: "4. Run it"; color: Theme.text; font-weight: 800; }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        Btn { label: "Start"; primary: true; enabled: !root.dc-running; clicked => { root.dc-action("start"); } }
-                        Btn { label: "Stop"; danger: true; enabled: root.dc-running; clicked => { root.dc-action("stop"); } }
-                        Btn { label: "Restart"; clicked => { root.dc-action("restart"); } }
-                        VerticalLayout { alignment: center; Text { text: root.dc-running ? "Up for " + root.dc-uptime : "Not running"; color: Theme.mute; } }
-                        Rectangle { horizontal-stretch: 1; }
+                // commands
+                Panel {
+                    height: 20px + 40px + 12px + 5 * 58px + 14px + 66px + 20px;
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 0px;
+                        CardTitle { title: "What the bot does"; sub: "Switch features on or off."; icon: @image-url("../assets/icons/sliders.svg"); }
+                        Rectangle { height: 12px; }
+                        FeatureRow { title: "Start with the engine"; desc: "The bot comes online by itself whenever the engine starts."; checked: root.dc-autostart; toggled(v) => { root.dc-config("autostart", v); } }
+                        FeatureRow { title: "/modlist"; desc: "Shows the mods of each server, with links."; checked: root.dc-modlist; toggled(v) => { root.dc-config("modlist", v); } }
+                        FeatureRow { title: "/fingerprint"; desc: "AutoModpack certificate, read from the server log."; checked: root.dc-fingerprint; toggled(v) => { root.dc-config("fingerprint", v); } }
+                        FeatureRow { title: "/start"; desc: "Discord admins can switch a server on (never off)."; checked: root.dc-startcmd; toggled(v) => { root.dc-config("startcmd", v); } }
+                        FeatureRow { title: "/welcome"; desc: "Posts a join guide for new players."; checked: root.dc-welcome; toggled(v) => { root.dc-config("welcome", v); } }
+                        Rectangle { height: 14px; }
+                        Text { text: "Who may use admin commands (Discord user IDs, comma separated; empty means everyone)"; color: Theme.mute; font-size: 12px; height: 20px; overflow: elide; }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            height: 38px;
+                            TextBox { placeholder: "123456789012345678, ..."; text <=> root.dc-allowed; horizontal-stretch: 1; accepted(t) => { root.dc-save-allowed(t); } }
+                            Btn { label: "Save"; clicked => { root.dc-save-allowed(root.dc-allowed); } }
+                        }
                     }
                 }
-            }
-            Panel {
-                height: 292px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 10px;
-                    Text { text: "Options"; color: Theme.text; font-weight: 800; }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.dc-autostart; toggled => { root.dc-config("autostart", self.checked); } } Text { text: "Start the bot whenever the engine starts"; color: Theme.text; vertical-alignment: center; } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.dc-modlist; toggled => { root.dc-config("modlist", self.checked); } } Text { text: "/modlist command (mods of each server, with links)"; color: Theme.text; vertical-alignment: center; } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.dc-fingerprint; toggled => { root.dc-config("fingerprint", self.checked); } } Text { text: "/fingerprint command (AutoModpack certificate, read from the server log)"; color: Theme.text; vertical-alignment: center; } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.dc-startcmd; toggled => { root.dc-config("startcmd", self.checked); } } Text { text: "/start command (Discord admins can switch a server ON, never off)"; color: Theme.text; vertical-alignment: center; } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.dc-welcome; toggled => { root.dc-config("welcome", self.checked); } } Text { text: "/welcome command (posts a join guide)"; color: Theme.text; vertical-alignment: center; } }
-                    Text { text: "Who may use admin commands (Discord user IDs, comma separated; empty = everyone)"; color: Theme.mute; }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        TextBox { placeholder: "123456789012345678, ..."; text <=> root.dc-allowed; horizontal-stretch: 1; accepted(t) => { root.dc-save-allowed(t); } }
-                        Btn { label: "Save"; clicked => { root.dc-save-allowed(root.dc-allowed); } }
+                // alerts
+                Panel {
+                    height: 20px + 40px + 12px + 1px + 12px + 38px + 12px + 38px + 12px + 38px + 12px + 5 * 58px + 12px + 20px + 20px;
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 12px;
+                        CardTitle { title: "Server alerts"; sub: "A Discord channel hears when a server starts, stops, crashes, or players come and go."; icon: @image-url("../assets/icons/bolt.svg"); }
+                        Rectangle { height: 1px; background: Theme.line; }
+                        HorizontalLayout {
+                            spacing: 10px;
+                            height: 38px;
+                            VerticalLayout { alignment: center; Text { text: "For server"; color: Theme.mute; font-size: 12px; } }
+                            ComboBox { model: root.al-servers; current-index <=> root.al-index; selected => { root.al-load(root.al-index); } horizontal-stretch: 1; }
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            height: 38px;
+                            TextBox { placeholder: root.al-hint == "" ? "Webhook link: channel settings, Integrations, Webhooks" : "Saved (" + root.al-hint + "). Paste a new link to replace it."; text <=> root.al-url; horizontal-stretch: 1; accepted(t) => { root.al-save-url(t); } }
+                            Btn { label: "Save link"; primary: true; clicked => { root.al-save-url(root.al-url); } }
+                            Btn { label: "Test"; clicked => { root.al-test(); } }
+                            Btn { label: "Remove"; danger: true; clicked => { root.al-remove(); } }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            height: 38px;
+                            ComboBox { model: ["30 seconds", "1 minute", "5 minutes", "1 hour", "Never"]; current-index <=> root.al-ttl-index; selected => { root.al-ttl(root.al-ttl-index); } width: 150px; }
+                            VerticalLayout { alignment: center; Text { text: "Delete each message after this long"; color: Theme.mute; font-size: 12px; } }
+                        }
+                        VerticalLayout {
+                            spacing: 0px;
+                            FeatureRow { title: "Server is online"; desc: "Posts when it finishes starting."; checked: root.al-start; toggled(v) => { root.al-flag("start", v); } }
+                            FeatureRow { title: "Server stopped"; desc: "Posts when it shuts down normally."; checked: root.al-stop; toggled(v) => { root.al-flag("stop", v); } }
+                            FeatureRow { title: "Server crashed"; desc: "Posts when it stops unexpectedly."; checked: root.al-crash; toggled(v) => { root.al-flag("crash", v); } }
+                            FeatureRow { title: "Someone joins"; desc: "Posts each time a player joins."; checked: root.al-join; toggled(v) => { root.al-flag("join", v); } }
+                            FeatureRow { title: "Someone leaves"; desc: "Posts each time a player leaves."; checked: root.al-leave; toggled(v) => { root.al-flag("leave", v); } }
+                        }
+                        Text { text: root.al-msg; color: Theme.warn; font-size: 12px; height: 20px; overflow: elide; }
                     }
                 }
-            }
-            Panel {
-                height: 430px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 8px;
-                    Text { text: "5. Server alerts (webhook)"; color: Theme.text; font-weight: 800; }
-                    Text { text: "Pick a server, then paste its Discord webhook link (channel settings > Integrations > Webhooks > New webhook > Copy link). The server posts when it starts, stops, crashes, or players join or leave."; color: Theme.mute; wrap: word-wrap; }
-                    ComboBox { model: root.al-servers; current-index <=> root.al-index; selected => { root.al-load(root.al-index); } }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        TextBox { placeholder: root.al-hint == "" ? "https://discord.com/api/webhooks/..." : "Saved (" + root.al-hint + "). Paste a new link to replace it."; text <=> root.al-url; horizontal-stretch: 1; accepted(t) => { root.al-save-url(t); } }
-                        Btn { label: "Save link"; primary: true; clicked => { root.al-save-url(root.al-url); } }
-                        Btn { label: "Test"; clicked => { root.al-test(); } }
-                        Btn { label: "Remove"; danger: true; clicked => { root.al-remove(); } }
+                Panel {
+                    height: 240px;
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 10px;
+                        CardTitle { title: "Bot log"; sub: "The latest lines from the bot."; icon: @image-url("../assets/icons/terminal.svg"); }
+                        Rectangle {
+                            vertical-stretch: 1;
+                            border-radius: 10px;
+                            background: Theme.rail;
+                            ScrollView { VerticalLayout { padding: 10px; Text { text: root.dc-log == "" ? "Nothing yet." : root.dc-log; color: Theme.mute; font-size: 11px; wrap: word-wrap; } } }
+                        }
                     }
-                    HorizontalLayout { spacing: 12px; ComboBox { model: ["30 seconds", "1 minute", "5 minutes", "1 hour", "Never"]; current-index <=> root.al-ttl-index; selected => { root.al-ttl(root.al-ttl-index); } width: 150px; } VerticalLayout { alignment: center; Text { text: "Delete each message after this long"; color: Theme.mute; } } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.al-start; toggled => { root.al-flag("start", self.checked); } } Text { text: "Server is online"; color: Theme.text; vertical-alignment: center; } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.al-stop; toggled => { root.al-flag("stop", self.checked); } } Text { text: "Server stopped"; color: Theme.text; vertical-alignment: center; } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.al-crash; toggled => { root.al-flag("crash", self.checked); } } Text { text: "Server crashed"; color: Theme.text; vertical-alignment: center; } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.al-join; toggled => { root.al-flag("join", self.checked); } } Text { text: "Someone joins"; color: Theme.text; vertical-alignment: center; } }
-                    HorizontalLayout { spacing: 12px; Toggle { checked: root.al-leave; toggled => { root.al-flag("leave", self.checked); } } Text { text: "Someone leaves"; color: Theme.text; vertical-alignment: center; } }
-                    Text { text: root.al-msg; color: Theme.warn; wrap: word-wrap; }
-                }
-            }
-            Panel {
-                height: 220px;
-                VerticalLayout {
-                    padding: 18px;
-                    spacing: 6px;
-                    Text { text: "Bot log"; color: Theme.text; font-weight: 800; }
-                    ScrollView { Text { text: root.dc-log == "" ? "Nothing yet." : root.dc-log; color: Theme.mute; font-size: 11px; wrap: word-wrap; width: 100%; } }
                 }
             }
         }
-    }         }
-}
+    }
 
     // ---------------------------------------------------------------- settings (app)
     if page == "settings": HorizontalLayout {
@@ -3215,8 +3600,8 @@ export component App inherits Window {
             VerticalLayout { alignment: center; Text { text: "Settings"; color: Theme.text; font-size: 28px; font-weight: 700; } }
         }
         Panel {
-            height: 330px;
-            ThemePicker { padding: 20px; }
+            height: tp2.total + 40px;
+            tp2 := ThemePicker { padding: 20px; }
         }
         Panel {
             height: 74px;
@@ -3285,11 +3670,19 @@ export component App inherits Window {
             }
         }
         Panel {
-            height: root.upd-need-token ? 270px : 206px;
+            height: root.upd-need-token ? 350px : 290px;
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
-                Text { text: "Updates"; color: Theme.text; font-weight: 800; font-size: 15px; }
+                HorizontalLayout {
+                    spacing: 10px;
+                    Text { text: "Updates"; color: Theme.text; font-weight: 800; font-size: 15px; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; }
+                    Rectangle {
+                        width: vtxt.preferred-width + 22px; height: 24px; border-radius: 12px; background: Theme.panel2; border-width: 1px; border-color: Theme.line;
+                        vtxt := Text { text: "This app " + root.upd-cur; color: Theme.mute; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
                 Text { text: "Updates come straight from GitHub. Press Check, then Update now. It updates the engine and this app, on Mac and Windows."; color: Theme.mute; font-size: 12px; wrap: word-wrap; }
                 HorizontalLayout {
                     spacing: 10px;
@@ -3297,7 +3690,17 @@ export component App inherits Window {
                     Btn { label: "Check for updates"; enabled: !root.upd-busy; clicked => { root.upd-check(); } }
                     if root.upd-avail != "": Btn { label: "Update to " + root.upd-avail; primary: true; enabled: !root.upd-busy; clicked => { root.upd-install(); } }
                 }
-                Text { text: root.upd-msg; color: Theme.warn; font-size: 12px; wrap: word-wrap; }
+                if root.upd-msg != "": Rectangle {
+                    background: Theme.panel2; border-radius: 8px; border-width: 1px; border-color: Theme.line;
+                    height: umsg.preferred-height + 20px;
+                    umsg := Text { x: 12px; y: 10px; width: parent.width - 24px; text: root.upd-msg; color: Theme.warn; font-size: 12px; wrap: word-wrap; }
+                }
+                Text { text: "Where updates come from (GitHub repository)"; color: Theme.mute; font-size: 11px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 10px;
+                    TextBox { placeholder: "owner/name, e.g. yukibafi/Slate-Server"; text <=> root.upd-repo; horizontal-stretch: 1; }
+                    Btn { label: "Save"; clicked => { root.upd-save-repo(root.upd-repo); } }
+                }
                 if root.upd-need-token: HorizontalLayout {
                     spacing: 10px;
                     TextBox { placeholder: "GitHub token (only needed if the repository is private)"; text <=> root.upd-token; password: true; horizontal-stretch: 1; }

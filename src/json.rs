@@ -142,6 +142,7 @@ impl J {
         if let J::Obj(m) = self { m.iter().find(|(a, _)| a == k).map(|(_, v)| v) } else { None }
     }
     pub fn as_str(&self) -> Option<&str> { if let J::Str(t) = self { Some(t) } else { None } }
+    pub fn as_bool(&self) -> Option<bool> { if let J::Bool(b) = self { Some(*b) } else { None } }
 }
 
 #[allow(dead_code)]

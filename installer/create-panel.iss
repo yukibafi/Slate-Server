@@ -2,7 +2,7 @@
 ; after `cargo build --release` in both the root and gui/). Installs for the current user only, no admin prompt.
 #define AppName "Slate Server"
 #ifndef AppVersion
-  #define AppVersion "0.2.12"
+  #define AppVersion "0.2.13"
 #endif
 #ifndef BinDir
   #define BinDir "..\target\release"

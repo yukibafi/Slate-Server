@@ -1,6 +1,6 @@
 [package]
 name = "create-panel"
-version = "0.2.12"
+version = "0.2.13"
 edition = "2021"
 description = "Create Server Panel, Rust port (phase 1: server panel core)"
 
